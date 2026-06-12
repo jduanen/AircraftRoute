@@ -1,5 +1,7 @@
 # AircraftRoute
-Aircraft callsign to route lookup tools
+
+Aircraft callsign to route lookup tools that services hits out of a local, persistant, cache, and misses from a list of web-API services.
+This includes a local web-server that offers callsign to route lookups.
 
 ---
 ## callsignLookup.py: script to get route information for a given callsign
@@ -34,11 +36,11 @@ RouteCache (SQLite)  ──hit──▶  FlightRoute
   │
   ▼
 Service chain (in order, skip unavailable)
+  4. AviationStack
+  5. OpenSky
   1. AirLabs
   2. AeroDataBox
-  3. FlightAware
-  4. AviationStack
-  5. OpenSky  ← last resort; indirect route lookup
+  3. FlightAware (last because it will auto-charge if you exceed your monthly quota)
   │
   ▼
 Airline name fallback: prefix match against data/AirlineCodes.csv
