@@ -1,0 +1,19 @@
+[Unit]
+Description=Callsign lookup web API server
+After=network.target
+
+[Service]
+Type=simple
+User=jdn
+Group=jdn
+WorkingDirectory=/home/jdn/Code/AircraftRoute
+ExecStart=/home/jdn/Code/AircraftRoute/venv/bin/python \
+    /home/jdn/Code/AircraftRoute/scripts/callsignServer.py \
+    --config /home/jdn/Code/AircraftRoute/config.json \
+    --port 5000 \
+    --logLevel INFO
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
