@@ -342,6 +342,10 @@ Takes a path to where the .csv file is to be written as the only argument, gets 
 
 This populates the `./data` directory with the AirlineCodes.csv file that is given to callsignLookup.py (either on the command line or via its config file).
 
+```bash
+python ./scripts/getAirlineCodes.py ./data/AirlineCodes.csv
+```
+
 ---
 
 ## lookupCallsigns.py: ????
