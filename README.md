@@ -36,11 +36,11 @@ RouteCache (SQLite)  ──hit──▶  FlightRoute
   │
   ▼
 Service chain (in order, skip unavailable)
-  4. AviationStack
-  5. OpenSky
-  1. AirLabs
-  2. AeroDataBox
-  3. FlightAware (last because it will auto-charge if you exceed your monthly quota)
+  1. AviationStack
+  2. OpenSky
+  3. AirLabs
+  4. AeroDataBox
+  5. FlightAware (last because it will auto-charge if you exceed your monthly quota)
   │
   ▼
 Airline name fallback: prefix match against data/AirlineCodes.csv
