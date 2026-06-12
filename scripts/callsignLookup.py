@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import requests
 
-DEF_ROUTE_DB_PATH = "~/.aircrafttracker/routes.db"
+DEF_ROUTE_DB_PATH = "~/.aircraftroute/routes.db"
 
 log = logging.getLogger(__name__)
 
