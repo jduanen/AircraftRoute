@@ -11,7 +11,7 @@ ExecStart=/home/jdn/Code/AircraftRoute/venv/bin/python \
     /home/jdn/Code/AircraftRoute/scripts/callsignServer.py \
     --config /home/jdn/Code/AircraftRoute/config.json \
     --port 5000 \
-    --logLevel INFO
+    --logLevel WARNING
 Restart=on-failure
 RestartSec=5
 
