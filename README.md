@@ -2,20 +2,22 @@
 Aircraft callsign to route lookup tools
 
 ---
-## callsignLookup.py: Callsign to route lookup script
+## callsignLookup.py: script to get route information for a given callsign
 
 A module that, given an aircraft callsign (e.g. `AAL1599`), returns the airline name and route (origin + destination airports with ICAO codes, names, cities, countries, and coordinates).
 
 ### Files
 
 ```
+config.example.json      # copy to config.json and fill in API keys
 scripts/
-  callsignLookup.py          # main module — importable library + CLI
-  callsignServer.py          # Flask web API server
-  config.example.json        # copy to config.json and fill in API keys
+  aircraftInfo.sh        # tool to get information about a given aircraft
+  callsignLookup.py      # main module — importable library + CLI
+  callsignServer.py      # Flask web API server
+  getAirlineCodes.py     # script to get mapping of airline codes to names
 data/
-  List_of_airline_codes.csv  # Wikipedia airline codes table (IATA, ICAO, Airline, ...)
-requirements.txt             # requests, flask
+  AirlineCodes.csv       # Wikipedia airline codes table (IATA, ICAO, Airline, ...)
+requirements.txt       # requests, flask
 ```
 
 ---
@@ -39,7 +41,7 @@ Service chain (in order, skip unavailable)
   5. OpenSky  ← last resort; indirect route lookup
   │
   ▼
-Airline name fallback: prefix match against data/List_of_airline_codes.csv
+Airline name fallback: prefix match against data/AirlineCodes.csv
   │
   ▼
 RouteCache.put() + return FlightRoute
@@ -120,7 +122,7 @@ Paid; highest data quality.
 ```json
 {
   "cacheDb": "~/.AircraftRoute/routes.db",
-  "airlineCodesCsv": "data/List_of_airline_codes.csv",
+  "airlineCodesCsv": "data/AirlineCodes.csv",
   "services": [
     { "name": "airLabs",       "enabled": true,  "apiKey": "<key>",        "requestDelay": 1.0 },
     { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",        "requestDelay": 1.0 },
@@ -145,7 +147,7 @@ CLI flags override config values.
 python callsignLookup.py AAL1599 --config config.json
 
 # Lookup without a config (airline name only from CSV, no route)
-python callsignLookup.py AAL1599 --airlineCodes data/List_of_airline_codes.csv
+python callsignLookup.py AAL1599 --airlineCodes data/AirlineCodes.csv
 
 # Pass API key directly
 python callsignLookup.py AAL1599 --airLabsKey YOUR_KEY
@@ -209,7 +211,7 @@ lookup = FlightInfoLookup(config="/home/jdn/Code/AircraftRoute/config.json")
 # Or fully programmatic
 lookup = FlightInfoLookup(
     cacheDb="~/.AircraftRoute/routes.db",
-    airlineCodesCsv="/home/jdn/Code/AircraftRoute/data/List_of_airline_codes.csv",
+    airlineCodesCsv="/home/jdn/Code/AircraftRoute/data/AirlineCodes.csv",
     services=[
         {"name": "airLabs", "enabled": True, "apiKey": "YOUR_KEY"},
     ],
@@ -290,15 +292,55 @@ GET /callsign/<callsign>
 
 ---
 
-## aircraftInfo.sh: ????
+## aircraftInfo.sh: script to get information about an aircraft given its ICAO24 code
 
-**TBD**
+Takes a single arg (the aircraft of interest's 24-bit hex code) and returns a JSON object with information about the given aircraft.
+This uses the OpenSky free web API.
+
+Returned JSON object example:
+```json
+{
+  "registration": "N13110",
+  "manufacturerName": "Boeing",
+  "manufacturerIcao": "BOEING",
+  "model": "757-224",
+  "typecode": "B752",
+  "serialNumber": "27300",
+  "lineNumber": "",
+  "icaoAircraftClass": "L2J",
+  "selCal": "",
+  "operator": "",
+  "operatorCallsign": "UNITED",
+  "operatorIcao": "UAL",
+  "operatorIata": "",
+  "owner": "United Airlines Inc",
+  "categoryDescription": "",
+  "registered": null,
+  "regUntil": "2027-10-31",
+  "status": "",
+  "built": null,
+  "firstFlightDate": null,
+  "engines": "ROLLS-ROYC RB-211 SERIES",
+  "modes": false,
+  "adsb": false,
+  "acars": false,
+  "vdl": false,
+  "notes": "",
+  "country": "United States",
+  "lastSeen": null,
+  "firstSeen": null,
+  "icao24": "a0817c",
+  "timestamp": "2023-03-23T19:00:00.000Z"
+}
+```
 
 ---
 
-## getAirlineCodes.py: ????
+## getAirlineCodes.py: Script to fetch the airline codes table from Wikipedia and write it to a CSV file
 
-**TBD**
+Takes a path to where the .csv file is to be written as the only argument, gets the web page html, reads it in using pandas, and writes it out using pandas.
+
+This populates the `./data` directory with the AirlineCodes.csv file that is given to callsignLookup.py (either on the command line or via its config file).
 
 ---
 
