@@ -202,16 +202,16 @@ All CLI flags:
 
 ```python
 import sys
-sys.path.insert(0, "/home/jdn/Code/AircraftRoute")
+sys.path.insert(0, "${HOME}/Code/AircraftRoute")
 from callsignLookup import FlightInfoLookup, FlightRoute, Airport
 
 # From a config file
-lookup = FlightInfoLookup(config="/home/jdn/Code/AircraftRoute/config.json")
+lookup = FlightInfoLookup(config="${HOME}/Code/AircraftRoute/config.json")
 
 # Or fully programmatic
 lookup = FlightInfoLookup(
     cacheDb="~/.AircraftRoute/routes.db",
-    airlineCodesCsv="/home/jdn/Code/AircraftRoute/data/AirlineCodes.csv",
+    airlineCodesCsv="${HOME}/Code/AircraftRoute/data/AirlineCodes.csv",
     services=[
         {"name": "airLabs", "enabled": True, "apiKey": "YOUR_KEY"},
     ],
@@ -291,6 +291,45 @@ curl http://localhost:5000/callsign/UAL2409
 **Response — not found (HTTP 404):**
 ```json
 { "found": false, "callsign": "INVALID999" }
+```
+
+### Setting up the callsign to route lookup webserver
+
+1. Copy the unit file to systemd
+```bash
+sudo cp ${HOME}/Code/AircraftRoute/etc/systemd/system/callsignServer.service \
+  /etc/systemd/system/callsignServer.service
+```
+
+2. Reload systemd so it picks up the new unit
+```bash
+sudo systemctl daemon-reload
+```
+
+3. Enable it to start on boot
+```bash
+sudo systemctl enable callsignServer
+```
+
+4. Start it now
+```bash
+sudo systemctl start callsignServer
+```
+
+5. Verify it's running
+```bash
+sudo systemctl status callsignServer
+```
+
+Check the logs to make sure nothing is unhappy:
+```bash
+journalctl -u callsignServer -f
+```
+Make sure the venv exists at ${HOME}/Code/AircraftRoute/venv/ before starting; if not, create it first:
+```bash
+cd ${HOME}/Code/AircraftRoute
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 ```
 
 ---
