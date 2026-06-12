@@ -270,6 +270,11 @@ python scripts/callsignServer.py --config config.json [--port 5000] [--host 0.0.
 GET /callsign/<callsign>
 ```
 
+**Example use:**
+```bash
+curl http://localhost:5000/callsign/UAL2409
+```
+
 **Response — found (HTTP 200):**
 ```json
 {
@@ -287,8 +292,6 @@ GET /callsign/<callsign>
 ```json
 { "found": false, "callsign": "INVALID999" }
 ```
-
----
 
 ---
 
