@@ -348,8 +348,38 @@ python ./scripts/getAirlineCodes.py ./data/AirlineCodes.csv
 
 ---
 
-## lookupCallsigns.py: ????
+## lookupCallsigns.py: Script to look up the airline names for a list of callsigns
 
-**TBD**
+This script takes as args, the path to a file containing one or more callsigns (one string per line), a path to the airline codes .csv file, and a path to where the output .csv file should be written. It looks up each callsign's airline in the airline codes file, and writes an output .csv-format file with the callsign, the name of the airline, and its ICAO Airline Code.
+
+Example input file contents:
+```csv
+AAL2426
+AAL2430
+WJA1504
+WUP948
+XAA2202
+XAAIG
+XSN06
+```
+
+Example use:
+```bash
+python scripts/lookupCallsigns.py callsigns.txt ./data/ListOfAirlineCodes.csv outfile.csv
+Processed 7 callsigns, 5 matched (2 unmatched)
+Written to outfile.csv
+```
+
+Example output file contents:
+```csv
+callsign,airline,airlineCode
+AAL2426,American Airlines,AAL
+AAL2430,American Airlines,AAL
+WJA1504,WestJet,WJA
+WUP948,,WUP
+XAA2202,Aeronautical Radio Inc,XAA
+XAAIG,,XAAIG
+XSN06,Stephenville Aviation Services,XSN
+```
 
 ---
