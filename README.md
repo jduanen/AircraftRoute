@@ -427,3 +427,24 @@ XSN06,Stephenville Aviation Services,XSN
 ```
 
 ---
+
+## getAirportCodes.sh: Script to get database of airports
+
+**TBD**
+
+????
+```bash
+./scripts/getAirportCodes.sh ./data/ListOfAirportCodes.csv
+```
+
+????
+```csv
+"id","ident","type","name","latitude_deg","longitude_deg","elevation_ft","continent","iso_country","iso_region","municipality","scheduled_service","icao_code","iata_code","gps_code","local_code","home_link","wikipedia_link","keywords"
+6523,"00A","heliport","Total RF Heliport",40.070985,-74.933689,11,"NA","US","US-PA","Bensalem","no",,,"K00A","00A","https://www.penndot.pa.gov/TravelInPA/airports-pa/Pages/Total-RF-Heliport.aspx",,
+323361,"00AA","small_airport","Aero B Ranch Airport",38.704022,-101.473911,3435,"NA","US","US-KS","Leoti","no",,,"00AA","00AA",,,
+6524,"00AK","small_airport","Lowell Field",59.947733,-151.692524,450,"NA","US","US-AK","Anchor Point","no",,,"00AK","00AK",,,
+6525,"00AL","small_airport","Epps Airpark",34.86479949951172,-86.77030181884766,820,"NA","US","US-AL","Harvest","no",,,"00AL","00AL",,,
+
+```
+
+---
