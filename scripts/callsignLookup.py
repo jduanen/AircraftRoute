@@ -642,6 +642,11 @@ class FlightInfoLookup:
             log.debug("Cache miss for %s (cacheOnly — not calling services)", callsign)
             return None
 
+        prefix = _callsignPrefix(callsign)
+        if self._airlineLookup and not self._airlineLookup.get(prefix):
+            log.debug("Skipping service lookup for %s — prefix %r not an airline code", callsign, prefix)
+            return None
+
         route = None
         log.debug("Service chain for %s: %s", callsign, [s.name for s in self._services])
         for svc in self._services:
