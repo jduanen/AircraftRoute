@@ -44,6 +44,7 @@ class Airport:
     country: str
     lat: float
     lon: float
+    iata: str = ""
 
 
 @dataclass
@@ -75,50 +76,73 @@ class RouteCache:
         CREATE TABLE IF NOT EXISTS routes (
             callsign      TEXT PRIMARY KEY,
             airline       TEXT,
-            origin_icao   TEXT, origin_name    TEXT, origin_city    TEXT,
-            origin_country TEXT, origin_lat    REAL, origin_lon     REAL,
-            dest_icao     TEXT, dest_name      TEXT, dest_city      TEXT,
-            dest_country  TEXT, dest_lat       REAL, dest_lon       REAL,
+            origin_icao   TEXT, origin_iata   TEXT, origin_name    TEXT,
+            origin_city   TEXT, origin_country TEXT, origin_lat    REAL, origin_lon     REAL,
+            dest_icao     TEXT, dest_iata     TEXT, dest_name      TEXT,
+            dest_city     TEXT, dest_country  TEXT, dest_lat       REAL, dest_lon       REAL,
             cached_at     TEXT
         )
     """
+    _MIGRATE = [
+        "ALTER TABLE routes ADD COLUMN origin_iata TEXT",
+        "ALTER TABLE routes ADD COLUMN dest_iata TEXT",
+    ]
 
     def __init__(self, dbPath: str):
         dbPath = os.path.expanduser(dbPath)
         os.makedirs(os.path.dirname(dbPath) or ".", exist_ok=True)
         self._conn = sqlite3.connect(dbPath, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         self._conn.execute(self._CREATE)
         self._conn.commit()
+        for stmt in self._MIGRATE:
+            try:
+                self._conn.execute(stmt)
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+    def _rowToRoute(self, row: sqlite3.Row) -> FlightRoute:
+        def airport(icao, iata, name, city, country, lat, lon):
+            if not icao:
+                return None
+            return Airport(icao=icao, iata=iata or "", name=name or "",
+                           city=city or "", country=country or "",
+                           lat=lat or 0.0, lon=lon or 0.0)
+        origin = airport(row["origin_icao"], row["origin_iata"], row["origin_name"],
+                         row["origin_city"], row["origin_country"],
+                         row["origin_lat"], row["origin_lon"])
+        dest = airport(row["dest_icao"], row["dest_iata"], row["dest_name"],
+                       row["dest_city"], row["dest_country"],
+                       row["dest_lat"], row["dest_lon"])
+        return FlightRoute(row["callsign"], row["airline"] or "", origin, dest)
 
     def get(self, callsign: str) -> FlightRoute | None:
         with self._lock:
             row = self._conn.execute(
                 "SELECT * FROM routes WHERE callsign = ?", (callsign,)
             ).fetchone()
-        if row is None:
-            return None
-        (cs, airline,
-         o_icao, o_name, o_city, o_country, o_lat, o_lon,
-         d_icao, d_name, d_city, d_country, d_lat, d_lon, _) = row
-        origin = Airport(o_icao, o_name, o_city, o_country, o_lat or 0.0, o_lon or 0.0) if o_icao else None
-        dest = Airport(d_icao, d_name, d_city, d_country, d_lat or 0.0, d_lon or 0.0) if d_icao else None
-        return FlightRoute(cs, airline or "", origin, dest)
+        return self._rowToRoute(row) if row else None
 
     def put(self, route: FlightRoute):
         o, d = route.origin, route.destination
         with self._lock:
             self._conn.execute(
-                """INSERT OR REPLACE INTO routes VALUES
-                   (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
+                """INSERT OR REPLACE INTO routes
+                   (callsign, airline,
+                    origin_icao, origin_iata, origin_name, origin_city, origin_country, origin_lat, origin_lon,
+                    dest_icao, dest_iata, dest_name, dest_city, dest_country, dest_lat, dest_lon,
+                    cached_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))""",
                 (
                     route.callsign, route.airline,
-                    o.icao if o else None, o.name if o else None,
-                    o.city if o else None, o.country if o else None,
-                    o.lat if o else None, o.lon if o else None,
-                    d.icao if d else None, d.name if d else None,
-                    d.city if d else None, d.country if d else None,
-                    d.lat if d else None, d.lon if d else None,
+                    o.icao if o else None, o.iata if o else None,
+                    o.name if o else None, o.city if o else None,
+                    o.country if o else None, o.lat if o else None, o.lon if o else None,
+                    d.icao if d else None, d.iata if d else None,
+                    d.name if d else None, d.city if d else None,
+                    d.country if d else None, d.lat if d else None, d.lon if d else None,
                 ),
             )
             self._conn.commit()
@@ -133,15 +157,7 @@ class RouteCache:
             rows = self._conn.execute(
                 "SELECT * FROM routes ORDER BY callsign"
             ).fetchall()
-        results = []
-        for row in rows:
-            (cs, airline,
-             o_icao, o_name, o_city, o_country, o_lat, o_lon,
-             d_icao, d_name, d_city, d_country, d_lat, d_lon, _) = row
-            origin = Airport(o_icao, o_name, o_city, o_country, o_lat or 0.0, o_lon or 0.0) if o_icao else None
-            dest = Airport(d_icao, d_name, d_city, d_country, d_lat or 0.0, d_lon or 0.0) if d_icao else None
-            results.append(FlightRoute(cs, airline or "", origin, dest))
-        return results
+        return [self._rowToRoute(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -187,13 +203,14 @@ class AirLabsService:
         try:
             data = self._get("/airports", {"icao_code": icao})
         except (RateLimitError, ServiceUnavailableError):
-            return Airport(icao, "", "", "", 0.0, 0.0)
+            return Airport(icao=icao, name="", city="", country="", lat=0.0, lon=0.0)
         rows = data.get("response", [])
         if not rows:
-            return Airport(icao, "", "", "", 0.0, 0.0)
+            return Airport(icao=icao, name="", city="", country="", lat=0.0, lon=0.0)
         r = rows[0]
         return Airport(
             icao=icao,
+            iata=r.get("iata_code", "") or "",
             name=r.get("name", ""),
             city=r.get("city", ""),
             country=r.get("country_code", ""),
@@ -257,14 +274,14 @@ class AeroDataBoxService:
         arr = f.get("arrival", {}).get("airport", {})
         log.debug("AeroDataBox: %s → dep=%s arr=%s", callsign, dep.get("icao"), arr.get("icao"))
         origin = Airport(
-            icao=dep.get("icao", ""), name=dep.get("name", ""),
-            city=dep.get("municipalityName", ""), country="",
+            icao=dep.get("icao", ""), iata=dep.get("iata", ""),
+            name=dep.get("name", ""), city=dep.get("municipalityName", ""), country="",
             lat=float((dep.get("location") or {}).get("lat", 0.0)),
             lon=float((dep.get("location") or {}).get("lon", 0.0)),
         ) if dep else None
         dest = Airport(
-            icao=arr.get("icao", ""), name=arr.get("name", ""),
-            city=arr.get("municipalityName", ""), country="",
+            icao=arr.get("icao", ""), iata=arr.get("iata", ""),
+            name=arr.get("name", ""), city=arr.get("municipalityName", ""), country="",
             lat=float((arr.get("location") or {}).get("lat", 0.0)),
             lon=float((arr.get("location") or {}).get("lon", 0.0)),
         ) if arr else None
@@ -309,6 +326,7 @@ class FlightAwareService:
                   callsign, dep.get("code_icao") or dep.get("code"), arr.get("code_icao") or arr.get("code"))
         origin = Airport(
             icao=dep.get("code_icao", "") or dep.get("code", ""),
+            iata=dep.get("code_iata", "") or "",
             name=dep.get("name", ""), city=dep.get("city", ""),
             country=dep.get("country_code", ""),
             lat=float(dep.get("latitude", 0.0) or 0.0),
@@ -316,6 +334,7 @@ class FlightAwareService:
         ) if dep else None
         dest = Airport(
             icao=arr.get("code_icao", "") or arr.get("code", ""),
+            iata=arr.get("code_iata", "") or "",
             name=arr.get("name", ""), city=arr.get("city", ""),
             country=arr.get("country_code", ""),
             lat=float(arr.get("latitude", 0.0) or 0.0),
@@ -366,14 +385,14 @@ class AviationStackService:
         log.debug("AviationStack: %s → dep=%s arr=%s airline=%s",
                   callsign, dep.get("icao"), arr.get("icao"), airline)
         origin = Airport(
-            icao=dep.get("icao", ""), name=dep.get("airport", ""),
-            city="", country="",
+            icao=dep.get("icao", ""), iata=dep.get("iata", "") or "",
+            name=dep.get("airport", ""), city="", country="",
             lat=float(dep.get("latitude", 0.0) or 0.0),
             lon=float(dep.get("longitude", 0.0) or 0.0),
         ) if dep.get("icao") else None
         dest = Airport(
-            icao=arr.get("icao", ""), name=arr.get("airport", ""),
-            city="", country="",
+            icao=arr.get("icao", ""), iata=arr.get("iata", "") or "",
+            name=arr.get("airport", ""), city="", country="",
             lat=float(arr.get("latitude", 0.0) or 0.0),
             lon=float(arr.get("longitude", 0.0) or 0.0),
         ) if arr.get("icao") else None
@@ -482,8 +501,8 @@ class OpenSkyService:
         log.debug("OpenSky: %s → dep=%s arr=%s", callsign, dep_icao, arr_icao)
         if not dep_icao and not arr_icao:
             return None
-        origin = Airport(dep_icao, "", "", "", 0.0, 0.0) if dep_icao else None
-        dest = Airport(arr_icao, "", "", "", 0.0, 0.0) if arr_icao else None
+        origin = Airport(icao=dep_icao, name="", city="", country="", lat=0.0, lon=0.0) if dep_icao else None
+        dest = Airport(icao=arr_icao, name="", city="", country="", lat=0.0, lon=0.0) if arr_icao else None
         return FlightRoute(callsign=callsign, airline="", origin=origin, destination=dest)
 
 
@@ -498,6 +517,28 @@ def _loadAirlineLookup(csvPath: str) -> dict[str, str]:
             icao = row["ICAO"].strip()
             if icao:
                 lookup[icao] = row["Airline"].strip()
+    return lookup
+
+
+# ---------------------------------------------------------------------------
+# Airport lookup from OurAirports CSV (ident -> Airport)
+# ---------------------------------------------------------------------------
+
+def _loadAirportLookup(csvPath: str) -> dict[str, Airport]:
+    lookup: dict[str, Airport] = {}
+    with open(csvPath, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            icao = row.get("ident", "").strip()
+            if icao:
+                lookup[icao] = Airport(
+                    icao=icao,
+                    iata=row.get("iata_code", "").strip(),
+                    name=row.get("name", "").strip(),
+                    city=row.get("municipality", "").strip(),
+                    country=row.get("iso_country", "").strip(),
+                    lat=float(row.get("latitude_deg", 0.0) or 0.0),
+                    lon=float(row.get("longitude_deg", 0.0) or 0.0),
+                )
     return lookup
 
 
@@ -533,6 +574,7 @@ class FlightInfoLookup:
         cacheDb: str | None = None,
         services: list[dict] | None = None,
         airlineCodesCsv: str | None = None,
+        airportCodesCsv: str | None = None,
         cacheOnly: bool = False,
     ):
         self.cacheOnly = cacheOnly
@@ -551,19 +593,42 @@ class FlightInfoLookup:
         dbPath = cacheDb or cfg.get("cacheDb") or DEF_ROUTE_DB_PATH
         self._cache = RouteCache(_resolve(dbPath))
 
-        csvPath = airlineCodesCsv or cfg.get("airlineCodesCsv")
+        airlineCsvPath = airlineCodesCsv or cfg.get("airlineCodesCsv")
         self._airlineLookup: dict[str, str] = {}
-        if csvPath:
-            resolved = _resolve(csvPath)
+        if airlineCsvPath:
+            resolved = _resolve(airlineCsvPath)
             if os.path.exists(resolved):
                 self._airlineLookup = _loadAirlineLookup(resolved)
+
+        airportCsvPath = airportCodesCsv or cfg.get("airportCodesCsv")
+        self._airportLookup: dict[str, Airport] = {}
+        if airportCsvPath:
+            resolved = _resolve(airportCsvPath)
+            if os.path.exists(resolved):
+                self._airportLookup = _loadAirportLookup(resolved)
 
         serviceCfgs = services if services is not None else cfg.get("services", [])
         self._services = [
             _buildService(s) for s in serviceCfgs if s.get("enabled", True)
         ]
         log.debug("FlightInfoLookup: services=%s airlineCodes=%s db=%s",
-                  [s.name for s in self._services], csvPath, dbPath)
+                  [s.name for s in self._services], airlineCsvPath, dbPath)
+
+    def _enrichAirport(self, airport: Airport | None) -> Airport | None:
+        if not airport or not self._airportLookup:
+            return airport
+        ref = self._airportLookup.get(airport.icao)
+        if ref is None:
+            return airport
+        return Airport(
+            icao=airport.icao,
+            iata=airport.iata or ref.iata,
+            name=airport.name or ref.name,
+            city=airport.city or ref.city,
+            country=airport.country or ref.country,
+            lat=airport.lat or ref.lat,
+            lon=airport.lon or ref.lon,
+        )
 
     def lookup(self, callsign: str, cacheOnly: bool = False) -> FlightRoute | None:
         callsign = callsign.strip().upper()
@@ -613,6 +678,8 @@ class FlightInfoLookup:
 
         if route is not None:
             route.airline = airline
+            route.origin = self._enrichAirport(route.origin)
+            route.destination = self._enrichAirport(route.destination)
             if route.origin and route.destination:
                 self._cache.put(route)
             else:
@@ -653,23 +720,24 @@ def _makeParser() -> argparse.ArgumentParser:
         description="Look up airline and route for an aircraft callsign."
     )
     p.add_argument("callsign", nargs="?", help="Callsign to look up (e.g. AAL1599)")
-    p.add_argument("--config",          metavar="PATH", help="JSON config file")
-    p.add_argument("--cache",           metavar="PATH", help="SQLite cache file")
-    p.add_argument("--airlineCodes",    metavar="PATH", help="Airline codes CSV")
-    p.add_argument("--airLabsKey",      metavar="KEY")
-    p.add_argument("--aeroDataBoxKey",  metavar="KEY")
-    p.add_argument("--flightAwareKey",  metavar="KEY")
-    p.add_argument("--aviationStackKey",metavar="KEY")
-    p.add_argument("--openSkyUser",     metavar="USER")
-    p.add_argument("--openSkyPass",     metavar="PASS")
-    p.add_argument("--flushCache",      action="store_true", help="Delete all cached routes and exit")
-    p.add_argument("--dumpCache",       action="store_true", help="Print all cached routes and exit")
-    p.add_argument("--fillCache",       metavar="FILE", help="Bulk-populate cache from callsign list file")
-    p.add_argument("--cacheOnly",       action="store_true", help="Only consult the cache; never call cloud services")
-    p.add_argument("--logLevel",        metavar="LEVEL", default="WARNING",
+    p.add_argument("--config",           metavar="PATH", help="JSON config file")
+    p.add_argument("--cache",            metavar="PATH", help="SQLite cache file")
+    p.add_argument("--airlineCodes",     metavar="PATH", help="Airline codes CSV")
+    p.add_argument("--airportCodes",     metavar="PATH", help="OurAirports CSV for IATA/name enrichment")
+    p.add_argument("--airLabsKey",       metavar="KEY")
+    p.add_argument("--aeroDataBoxKey",   metavar="KEY")
+    p.add_argument("--flightAwareKey",   metavar="KEY")
+    p.add_argument("--aviationStackKey", metavar="KEY")
+    p.add_argument("--openSkyUser",      metavar="USER")
+    p.add_argument("--openSkyPass",      metavar="PASS")
+    p.add_argument("--flushCache",       action="store_true", help="Delete all cached routes and exit")
+    p.add_argument("--dumpCache",        action="store_true", help="Print all cached routes and exit")
+    p.add_argument("--fillCache",        metavar="FILE", help="Bulk-populate cache from callsign list file")
+    p.add_argument("--cacheOnly",        action="store_true", help="Only consult the cache; never call cloud services")
+    p.add_argument("--logLevel",         metavar="LEVEL", default="WARNING",
                    choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                    help="Log level (default: WARNING)")
-    p.add_argument("--logFile",         metavar="FILE", help="Log to file instead of stdout")
+    p.add_argument("--logFile",          metavar="FILE", help="Log to file instead of stdout")
     return p
 
 
@@ -701,6 +769,7 @@ def main():
         config=args.config,
         cacheDb=args.cache,
         airlineCodesCsv=args.airlineCodes,
+        airportCodesCsv=args.airportCodes,
         services=_serviceOverrides(args),
         cacheOnly=args.cacheOnly,
     )
@@ -715,8 +784,8 @@ def main():
         if not routes:
             print("Cache is empty.")
         for route in routes:
-            origin = route.origin.icao if route.origin else "(unknown)"
-            dest = route.destination.icao if route.destination else "(unknown)"
+            origin = f"{route.origin.iata or route.origin.icao}" if route.origin else "(unknown)"
+            dest = f"{route.destination.iata or route.destination.icao}" if route.destination else "(unknown)"
             print(f"{route.callsign:<12} {route.airline:<30} {origin} → {dest}")
         return
 
@@ -737,12 +806,14 @@ def main():
     print(f"Airline  : {route.airline or '(unknown)'}")
     if route.origin:
         loc = f"{route.origin.city}, {route.origin.country}".strip(", ")
-        print(f"Origin   : {route.origin.icao}  {route.origin.name}  {loc}")
+        iata = f" ({route.origin.iata})" if route.origin.iata else ""
+        print(f"Origin   : {route.origin.icao}{iata}  {route.origin.name}  {loc}")
     else:
         print("Origin   : (unknown)")
     if route.destination:
         loc = f"{route.destination.city}, {route.destination.country}".strip(", ")
-        print(f"Dest     : {route.destination.icao}  {route.destination.name}  {loc}")
+        iata = f" ({route.destination.iata})" if route.destination.iata else ""
+        print(f"Dest     : {route.destination.icao}{iata}  {route.destination.name}  {loc}")
     else:
         print("Dest     : (unknown)")
 

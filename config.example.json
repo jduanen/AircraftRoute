@@ -1,6 +1,7 @@
 {
   "cacheDb": "~/.aircrafttracker/routes.db",
   "airlineCodesCsv": "data/AirlineCodes.csv",
+  "airportCodesCsv": "data/AirportCodes.csv",
   "services": [
     { "name": "airLabs",       "enabled": true,  "apiKey": "",                    "requestDelay": 1.0 },
     { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",               "requestDelay": 1.0 },

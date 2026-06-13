@@ -48,6 +48,7 @@ def main():
     p.add_argument("--config",       metavar="PATH", help="JSON config file")
     p.add_argument("--cache",        metavar="PATH", help="SQLite cache file (overrides config)")
     p.add_argument("--airlineCodes", metavar="PATH", help="Airline codes CSV (overrides config)")
+    p.add_argument("--airportCodes", metavar="PATH", help="Airport codes CSV (overrides config)")
     p.add_argument("--cacheOnly",    action="store_true", help="Only use cache; never call cloud services")
     p.add_argument("--host",         default="0.0.0.0",  help="Bind address (default: 0.0.0.0)")
     p.add_argument("--port",         type=int, default=5000, help="Port (default: 5000)")
@@ -65,6 +66,7 @@ def main():
         config=args.config,
         cacheDb=args.cache,
         airlineCodesCsv=args.airlineCodes,
+        airportCodesCsv=args.airportCodes,
         cacheOnly=args.cacheOnly,
     )
 
