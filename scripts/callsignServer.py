@@ -61,6 +61,7 @@ def main():
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(args.logLevel)
+    logging.getLogger("callsignLookup").setLevel(args.logLevel)
 
     _lookup = FlightInfoLookup(
         config=args.config,
