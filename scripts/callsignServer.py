@@ -52,16 +52,24 @@ def main():
     p.add_argument("--cacheOnly",    action="store_true", help="Only use cache; never call cloud services")
     p.add_argument("--host",         default="0.0.0.0",  help="Bind address (default: 0.0.0.0)")
     p.add_argument("--port",         type=int, default=5000, help="Port (default: 5000)")
-    p.add_argument("--logLevel",     default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-                   help="Log level (default: INFO)")
+    p.add_argument("--logLevel",     default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                   help="Log level (default: INFO, or value from config file)")
     p.add_argument("--logFile",      metavar="FILE", help="Log to file instead of stdout")
     args = p.parse_args()
+
+    cfg = {}
+    if args.config:
+        import json
+        with open(os.path.expanduser(args.config)) as f:
+            cfg = json.load(f)
+
+    logLevel = args.logLevel or cfg.get("logLevel", "INFO")
 
     handler = logging.FileHandler(args.logFile) if args.logFile else logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logging.getLogger().addHandler(handler)
-    logging.getLogger().setLevel(args.logLevel)
-    logging.getLogger("callsignLookup").setLevel(args.logLevel)
+    logging.getLogger().setLevel(logLevel)
+    logging.getLogger("callsignLookup").setLevel(logLevel)
 
     _lookup = FlightInfoLookup(
         config=args.config,
