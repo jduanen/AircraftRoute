@@ -643,7 +643,7 @@ class FlightInfoLookup:
             return None
 
         prefix = _callsignPrefix(callsign)
-        if self._airlineLookup and not self._airlineLookup.get(prefix):
+        if len(prefix) != 3 or (self._airlineLookup and not self._airlineLookup.get(prefix)):
             log.debug("Skipping service lookup for %s — prefix %r not an airline code", callsign, prefix)
             return None
 
