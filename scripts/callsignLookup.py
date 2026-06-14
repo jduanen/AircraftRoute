@@ -768,6 +768,7 @@ class FlightInfoLookup:
         return [
             {
                 'name':          svc.name,
+                'enabled':       svc.enabled,
                 'available':     svc.available,
                 'requestDelay':  svc.requestDelay,
                 'calls':         svc.stats['calls'],
