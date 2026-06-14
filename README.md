@@ -274,13 +274,10 @@ python scripts/callsignServer.py --config config.json [--port 5000] [--host 0.0.
   --logFile FILE
 ```
 
-**Endpoint:**
+### Endpoints
 
-```
-GET /callsign/<callsign>
-```
+#### `GET /callsign/<callsign>` — route lookup
 
-**Example use:**
 ```bash
 curl http://localhost:5000/callsign/UAL2409
 ```
@@ -291,8 +288,8 @@ curl http://localhost:5000/callsign/UAL2409
   "found": true,
   "callsign": "UAL2409",
   "airline": "United Airlines",
-  "origin":      { "icao": "CYYC", "name": "Calgary Int'l", "city": "Calgary", "country": "", "lat": 0.0, "lon": 0.0 },
-  "destination": { "icao": "KSFO", "name": "San Francisco Int'l", "city": "San Francisco", "country": "", "lat": 0.0, "lon": 0.0 }
+  "origin":      { "icao": "CYYC", "iata": "YYC", "name": "Calgary Int'l", "city": "Calgary", "country": "CA", "lat": 51.11, "lon": -114.02 },
+  "destination": { "icao": "KSFO", "iata": "SFO", "name": "San Francisco Int'l", "city": "San Francisco", "country": "US", "lat": 37.62, "lon": -122.38 }
 }
 ```
 
@@ -302,6 +299,108 @@ curl http://localhost:5000/callsign/UAL2409
 ```json
 { "found": false, "callsign": "INVALID999" }
 ```
+
+Non-commercial callsigns (e.g. `N551SJ`) return 404 immediately without calling any cloud service.
+
+---
+
+#### `GET /debug/<callsign>` — per-service lookup breakdown
+
+Tries every non-disabled, non-rate-limited service and returns all results. Does not cache.
+
+```bash
+curl http://localhost:5000/debug/AAL1599
+```
+
+```json
+{
+  "callsign": "AAL1599",
+  "cacheHit": false,
+  "cacheResult": null,
+  "services": [
+    { "name": "aviationStack", "status": "skipped", "reason": "rateLimited" },
+    { "name": "airLabs",       "status": "found",   "result": { "callsign": "AAL1599", ... } },
+    { "name": "aeroDataBox",   "status": "notFound" }
+  ]
+}
+```
+
+Service `status` values: `found` | `partial` | `notFound` | `rateLimited` | `unavailable` | `error` | `skipped`.
+`skipped` includes a `reason` field: `disabled` or `rateLimited`.
+
+---
+
+#### `GET /services` — service access statistics
+
+Per-service call counts and timestamps for the current server session.
+
+```bash
+curl http://localhost:5000/services
+```
+
+```json
+[
+  {
+    "name": "aviationStack", "enabled": true, "available": false, "requestDelay": 2.0,
+    "calls": 42, "found": 18, "notFound": 12, "partial": 0,
+    "rateLimitErrors": 1, "unavailableErrors": 0, "otherErrors": 11,
+    "lastCall": "2026-06-14T09:12:04",
+    "lastSuccessfulCall": "2026-06-14T08:54:11",
+    "lastRateLimit": "2026-06-14T08:55:22"
+  }
+]
+```
+
+Timestamps are `null` if the event has not occurred this session.
+
+---
+
+#### `GET /services/status` — service enablement state
+
+Lightweight view: current `enabled` and `available` state for each service.
+
+```bash
+curl http://localhost:5000/services/status
+```
+
+```json
+[
+  { "name": "aviationStack", "enabled": true,  "available": false },
+  { "name": "openSky",       "enabled": true,  "available": true  },
+  { "name": "airLabs",       "enabled": false, "available": true  }
+]
+```
+
+`enabled` — user-controlled (persists until server restart).
+`available` — cleared automatically when a service returns a rate-limit signal; restored when the service is re-enabled.
+
+---
+
+#### `POST /services/<name>` — enable or disable a service
+
+```bash
+# Disable a service
+curl -X POST http://localhost:5000/services/openSky \
+     -H "Content-Type: application/json" \
+     -d '{"enabled": false}'
+
+# Re-enable a service (also clears rate-limit flag)
+curl -X POST http://localhost:5000/services/airLabs \
+     -H "Content-Type: application/json" \
+     -d '{"enabled": true}'
+```
+
+**Response (HTTP 200):**
+```json
+{ "name": "airLabs", "enabled": true }
+```
+
+**Response — unknown service (HTTP 404):**
+```json
+{ "error": "unknown service: 'badName'" }
+```
+
+Service names: `airLabs`, `aeroDataBox`, `flightAware`, `aviationStack`, `openSky`.
 
 ### Setting up the callsign to route lookup webserver
 
