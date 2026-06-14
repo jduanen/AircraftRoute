@@ -18,11 +18,39 @@ from dataclasses import asdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from callsignLookup import FlightInfoLookup
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 log = logging.getLogger(__name__)
 app = Flask(__name__)
 _lookup: FlightInfoLookup = None
+
+
+@app.route("/services")
+def serviceStats():
+    return jsonify(_lookup.serviceStats())
+
+
+@app.route("/services/status")
+def serviceStatus():
+    return jsonify(_lookup.serviceStatus())
+
+
+@app.route("/services/<name>", methods=["POST"])
+def setServiceEnabled(name: str):
+    body = request.get_json(silent=True) or {}
+    if 'enabled' not in body:
+        return jsonify({"error": "request body must include 'enabled' (bool)"}), 400
+    if not _lookup.setServiceEnabled(name, bool(body['enabled'])):
+        return jsonify({"error": f"unknown service: {name!r}"}), 404
+    log.info("Service %r %s", name, "enabled" if body['enabled'] else "disabled")
+    return jsonify({"name": name, "enabled": bool(body['enabled'])})
+
+
+@app.route("/debug/<callsign>")
+def debugLookup(callsign: str):
+    callsign = callsign.strip().upper()
+    log.info("Debug request: %s", callsign)
+    return jsonify(_lookup.lookupDebug(callsign))
 
 
 @app.route("/callsign/<callsign>")

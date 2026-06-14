@@ -67,6 +67,14 @@ class ServiceUnavailableError(Exception):
     pass
 
 
+def _initStats() -> dict:
+    return {
+        'calls': 0, 'found': 0, 'notFound': 0, 'partial': 0,
+        'rateLimitErrors': 0, 'unavailableErrors': 0, 'otherErrors': 0,
+        'lastCall': None, 'lastSuccessfulCall': None, 'lastRateLimit': None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Persistent cache
 # ---------------------------------------------------------------------------
@@ -170,8 +178,10 @@ class AirLabsService:
 
     def __init__(self, apiKey: str, requestDelay: float = 0.0):
         self.apiKey = apiKey
+        self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
+        self.stats = _initStats()
         self._session = requests.Session()
 
     def _get(self, path: str, params: dict) -> dict:
@@ -241,8 +251,10 @@ class AeroDataBoxService:
 
     def __init__(self, rapidApiKey: str, requestDelay: float = 0.0):
         self.rapidApiKey = rapidApiKey
+        self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
+        self.stats = _initStats()
         self._session = requests.Session()
         self._session.headers.update({
             "X-RapidAPI-Key": rapidApiKey,
@@ -294,8 +306,10 @@ class FlightAwareService:
 
     def __init__(self, apiKey: str, requestDelay: float = 0.0):
         self.apiKey = apiKey
+        self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
+        self.stats = _initStats()
         self._session = requests.Session()
         self._session.headers.update({"x-apikey": apiKey})
 
@@ -349,8 +363,10 @@ class AviationStackService:
 
     def __init__(self, apiKey: str, requestDelay: float = 0.0):
         self.apiKey = apiKey
+        self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
+        self.stats = _initStats()
         self._session = requests.Session()
 
     def lookup(self, callsign: str) -> FlightRoute | None:
@@ -412,8 +428,10 @@ class OpenSkyService:
     def __init__(self, username: str = "", password: str = "", requestDelay: float = 0.0):
         self.username = username
         self.password = password
+        self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
+        self.stats = _initStats()
         self._session = requests.Session()
         self._token: str | None = None
         self._tokenExpiry: float = 0.0
@@ -650,34 +668,17 @@ class FlightInfoLookup:
         route = None
         log.debug("Service chain for %s: %s", callsign, [s.name for s in self._services])
         for svc in self._services:
+            if not svc.enabled:
+                log.debug("Skipping %s (disabled)", svc.name)
+                continue
             if not svc.available:
                 log.debug("Skipping %s (rate-limited this session)", svc.name)
                 continue
             log.debug("Trying service %s for %s", svc.name, callsign)
-            try:
-                result = svc.lookup(callsign)
-            except RateLimitError as e:
-                log.debug("%s rate-limited: %s — marking unavailable", svc.name, e)
-                svc.available = False
-                continue
-            except ServiceUnavailableError as e:
-                log.debug("%s unavailable: %s", svc.name, e)
-                continue
-            except Exception as e:
-                log.debug("%s unexpected error: %s — skipping", svc.name, e)
-                continue
-            finally:
-                if svc.requestDelay > 0:
-                    log.debug("%s: sleeping %.1fs (requestDelay)", svc.name, svc.requestDelay)
-                    time.sleep(svc.requestDelay)
-            if result is None:
-                log.debug("%s: not found for %s — trying next service", svc.name, callsign)
-                continue
-            if result.origin and result.destination:
-                log.debug("%s returned full route for %s", svc.name, callsign)
+            status, result = self._callService(svc, callsign)
+            if status == 'found':
                 route = result
                 break
-            log.debug("%s returned partial result for %s — trying next service", svc.name, callsign)
 
         airline = (route.airline if route else "") or self._airlineLookup.get(_callsignPrefix(callsign), "")
 
@@ -697,6 +698,119 @@ class FlightInfoLookup:
 
         log.debug("No result found for %s", callsign)
         return None
+
+    def _callService(self, svc, callsign: str) -> tuple[str, FlightRoute | None]:
+        """Call one service, update its stats, apply requestDelay.
+
+        Returns (status, result) where status is one of:
+          'found' | 'partial' | 'notFound' | 'rateLimited' | 'unavailable' | 'error'
+        """
+        svc.stats['calls'] += 1
+        svc.stats['lastCall'] = time.time()
+        try:
+            result = svc.lookup(callsign)
+        except RateLimitError as e:
+            svc.stats['rateLimitErrors'] += 1
+            svc.stats['lastRateLimit'] = time.time()
+            svc.available = False
+            log.debug("%s rate-limited: %s — marking unavailable", svc.name, e)
+            return 'rateLimited', None
+        except ServiceUnavailableError as e:
+            svc.stats['unavailableErrors'] += 1
+            log.debug("%s unavailable: %s", svc.name, e)
+            return 'unavailable', None
+        except Exception as e:
+            svc.stats['otherErrors'] += 1
+            log.debug("%s unexpected error: %s — skipping", svc.name, e)
+            return 'error', None
+        finally:
+            if svc.requestDelay > 0:
+                log.debug("%s: sleeping %.1fs (requestDelay)", svc.name, svc.requestDelay)
+                time.sleep(svc.requestDelay)
+        if result is None:
+            svc.stats['notFound'] += 1
+            log.debug("%s: not found for %s", svc.name, callsign)
+            return 'notFound', None
+        if result.origin and result.destination:
+            svc.stats['found'] += 1
+            svc.stats['lastSuccessfulCall'] = time.time()
+            log.debug("%s returned full route for %s", svc.name, callsign)
+            return 'found', result
+        svc.stats['partial'] += 1
+        svc.stats['lastSuccessfulCall'] = time.time()
+        log.debug("%s returned partial result for %s", svc.name, callsign)
+        return 'partial', result
+
+    def serviceStatus(self) -> list[dict]:
+        """Return current enablement and availability state for each service."""
+        return [
+            {'name': svc.name, 'enabled': svc.enabled, 'available': svc.available}
+            for svc in self._services
+        ]
+
+    def setServiceEnabled(self, name: str, enabled: bool) -> bool:
+        """Enable or disable a service by name. Returns False if name not found.
+
+        Re-enabling a service also clears its rate-limit flag so it will be tried again.
+        """
+        for svc in self._services:
+            if svc.name == name:
+                svc.enabled = enabled
+                if enabled:
+                    svc.available = True
+                return True
+        return False
+
+    def serviceStats(self) -> list[dict]:
+        """Return access statistics for each configured service."""
+        def fmtTime(ts):
+            return time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(ts)) if ts else None
+        return [
+            {
+                'name':          svc.name,
+                'available':     svc.available,
+                'requestDelay':  svc.requestDelay,
+                'calls':         svc.stats['calls'],
+                'found':         svc.stats['found'],
+                'notFound':      svc.stats['notFound'],
+                'partial':       svc.stats['partial'],
+                'rateLimitErrors':   svc.stats['rateLimitErrors'],
+                'unavailableErrors': svc.stats['unavailableErrors'],
+                'otherErrors':       svc.stats['otherErrors'],
+                'lastCall':           fmtTime(svc.stats['lastCall']),
+                'lastSuccessfulCall': fmtTime(svc.stats['lastSuccessfulCall']),
+                'lastRateLimit':      fmtTime(svc.stats['lastRateLimit']),
+            }
+            for svc in self._services
+        ]
+
+    def lookupDebug(self, callsign: str) -> dict:
+        """Look up a callsign and return a full breakdown of cache and per-service results.
+
+        Unlike lookup(), this tries all non-rate-limited services and never caches.
+        """
+        from dataclasses import asdict as _asdict
+        callsign = callsign.strip().upper()
+        cached = self._cache.get(callsign)
+        result = {
+            'callsign':    callsign,
+            'cacheHit':    cached is not None,
+            'cacheResult': _asdict(cached) if cached else None,
+            'services':    [],
+        }
+        for svc in self._services:
+            if not svc.enabled:
+                result['services'].append({'name': svc.name, 'status': 'skipped', 'reason': 'disabled'})
+                continue
+            if not svc.available:
+                result['services'].append({'name': svc.name, 'status': 'skipped', 'reason': 'rateLimited'})
+                continue
+            status, svcResult = self._callService(svc, callsign)
+            entry = {'name': svc.name, 'status': status}
+            if svcResult is not None:
+                entry['result'] = _asdict(svcResult)
+            result['services'].append(entry)
+        return result
 
     def fillCache(self, callsignsFile: str):
         with open(callsignsFile, encoding="utf-8") as f:
