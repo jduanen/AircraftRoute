@@ -641,8 +641,8 @@ class FlightInfoLookup:
         self._services = [
             _buildService(s) for s in serviceCfgs if s.get("enabled", True)
         ]
-        log.debug("FlightInfoLookup: services=%s airlineCodes=%s db=%s, includedPrefixes=%s, excludedPrefixes=%s",
-                  [s.name for s in self._services], airlineCsvPath, dbPath, self._includedPrefixes, self._excludedPrefixes)
+        log.debug("FlightInfoLookup: services=%s airlineCodes=%s airportCodes=%s db=%s, includedPrefixes=%s, excludedPrefixes=%s",
+                  [s.name for s in self._services], airlineCsvPath, airportCsvPath, dbPath, self._includedPrefixes, self._excludedPrefixes)
 
     def _enrichAirport(self, airport: Airport | None) -> Airport | None:
         if not airport or not self._airportLookup:
@@ -707,6 +707,10 @@ class FlightInfoLookup:
             route.origin = self._enrichAirport(route.origin)
             route.destination = self._enrichAirport(route.destination)
             if route.origin and route.destination:
+                for label, apt in (("origin", route.origin), ("dest", route.destination)):
+                    if not apt.country or not apt.lat:
+                        log.warning("%s: caching %s with incomplete airport data (%s: country=%r lat=%s lon=%s) — configure airportCodesCsv for enrichment",
+                                    callsign, label, apt.icao, apt.country, apt.lat, apt.lon)
                 self._cache.put(route)
             else:
                 log.debug("Not caching %s; missing origin or destination", callsign)
@@ -931,9 +935,16 @@ def main():
         if not routes:
             print("Cache is empty.")
         for route in routes:
-            origin = f"{route.origin.iata or route.origin.icao}" if route.origin else "(unknown)"
-            dest = f"{route.destination.iata or route.destination.icao}" if route.destination else "(unknown)"
-            print(f"{route.callsign:<12} {route.airline:<30} {origin} → {dest}")
+            print(f"{route.callsign:<12} {route.airline or '(unknown airline)'}")
+            for label, apt in (("Origin", route.origin), ("Dest  ", route.destination)):
+                if apt:
+                    code = f"{apt.iata} ({apt.icao})" if apt.iata else apt.icao
+                    loc = ", ".join(filter(None, [apt.city, apt.country]))
+                    coords = f"{apt.lat:.4f}/{apt.lon:.4f}" if (apt.lat or apt.lon) else ""
+                    detail = "  ".join(filter(None, [apt.name, loc, coords]))
+                    print(f"  {label}: {code:<14} {detail}")
+                else:
+                    print(f"  {label}: (unknown)")
         return
 
     if args.fillCache:
