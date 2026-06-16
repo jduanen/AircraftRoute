@@ -493,12 +493,18 @@ class OpenSkyService:
         return resp.json()
 
     def lookup(self, callsign: str) -> FlightRoute | None:
+        # /states/all has no callsign filter param (only icao24 / bounding box);
+        # fetch all states and match the callsign field (index 1) client-side.
         log.debug("OpenSky lookup %s (step 1: states/all)", callsign)
-        data = self._get("/states/all", {"callsign": callsign.ljust(8)})
+        data = self._get("/states/all", {})
         if not data or not data.get("states"):
+            log.debug("OpenSky: no states available")
+            return None
+        match = next((s for s in data["states"] if (s[1] or "").strip() == callsign), None)
+        if match is None:
             log.debug("OpenSky: no live state for %s", callsign)
             return None
-        icao24 = data["states"][0][0]
+        icao24 = match[0]
         log.debug("OpenSky: %s → icao24=%s (step 2: flights/aircraft)", callsign, icao24)
 
         now = int(time.time())
@@ -512,7 +518,8 @@ class OpenSkyService:
             return None
         flights = [f for f in data if f.get("callsign", "").strip() == callsign]
         if not flights:
-            flights = data
+            log.debug("OpenSky: no flight record matching callsign %s for icao24=%s", callsign, icao24)
+            return None
         f = flights[-1]
         dep_icao = f.get("estDepartureAirport") or ""
         arr_icao = f.get("estArrivalAirport") or ""
