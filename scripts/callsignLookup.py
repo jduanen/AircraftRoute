@@ -625,16 +625,24 @@ class FlightInfoLookup:
 
         airlineCsvPath = airlineCodesCsv or cfg.get("airlineCodesCsv")
         self._airlineLookup: dict[str, str] = {}
-        if airlineCsvPath:
+        if not airlineCsvPath:
+            log.warning("airlineCodesCsv not configured; airline names will be unavailable")
+        else:
             resolved = _resolve(airlineCsvPath)
-            if os.path.exists(resolved):
+            if not os.path.exists(resolved):
+                log.warning("airlineCodesCsv not found: %s; airline names will be unavailable", resolved)
+            else:
                 self._airlineLookup = _loadAirlineLookup(resolved)
 
         airportCsvPath = airportCodesCsv or cfg.get("airportCodesCsv")
         self._airportLookup: dict[str, Airport] = {}
-        if airportCsvPath:
+        if not airportCsvPath:
+            log.warning("airportCodesCsv not configured; airport enrichment (country, lat/lon) will be unavailable")
+        else:
             resolved = _resolve(airportCsvPath)
-            if os.path.exists(resolved):
+            if not os.path.exists(resolved):
+                log.warning("airportCodesCsv not found: %s; airport enrichment (country, lat/lon) will be unavailable", resolved)
+            else:
                 self._airportLookup = _loadAirportLookup(resolved)
 
         serviceCfgs = services if services is not None else cfg.get("services", [])
