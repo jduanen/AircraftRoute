@@ -114,8 +114,10 @@ Paid; highest data quality.
 #### 5. OpenSky: `https://opensky-network.org/api`
 400 credits/day free. No direct callsign→route API; route is estimated from trajectory.
 - Auth: OAuth2 Bearer token (30-min TTL, refreshed automatically), or anonymous
-- Step 1: `GET /states/all?callsign={callsign}` → find ICAO24 hex
+- Step 1: `GET /states/all` (no callsign filter exists server-side) → fetch all current states and match
+  the requested callsign against each state vector's `callsign` field client-side → ICAO24 hex
 - Step 2: `GET /flights/aircraft?icao24={hex}&begin=...&end=...` → estimated departure/arrival airports
+  for the flight whose `callsign` matches exactly; no match → no result (never guesses from a different flight)
 - Rate limit signal: HTTP 429; HTTP 401 triggers token refresh
 
 ---
