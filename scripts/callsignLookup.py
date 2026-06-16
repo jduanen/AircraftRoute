@@ -594,6 +594,7 @@ class FlightInfoLookup:
         airlineCodesCsv: str | None = None,
         airportCodesCsv: str | None = None,
         cacheOnly: bool = False,
+        excludedPrefixes: list[str] | None = None,
     ):
         self.cacheOnly = cacheOnly
         cfg = {}
@@ -603,6 +604,8 @@ class FlightInfoLookup:
             configDir = os.path.dirname(os.path.abspath(configPath))
             with open(configPath) as f:
                 cfg = json.load(f)
+
+        self._excludedPrefixes = excludedPrefixes or cfg.get("excludedPrefixes")
 
         def _resolve(path: str) -> str:
             path = os.path.expanduser(path)
@@ -663,6 +666,11 @@ class FlightInfoLookup:
         prefix = _callsignPrefix(callsign)
         if len(prefix) != 3 or (self._airlineLookup and not self._airlineLookup.get(prefix)):
             log.debug("Skipping service lookup for %s — prefix %r not an airline code", callsign, prefix)
+            return None
+
+        if self._excludedPrefixes and prefix in self._excludedPrefixes:
+            log.debug("Skipping service lookup for %s — prefix %r is in excluded prefix list: %s",
+                      callsign, prefix, self._excludedPrefixes)
             return None
 
         route = None
@@ -853,7 +861,10 @@ def _makeParser() -> argparse.ArgumentParser:
     p.add_argument("--flushCache",       action="store_true", help="Delete all cached routes and exit")
     p.add_argument("--dumpCache",        action="store_true", help="Print all cached routes and exit")
     p.add_argument("--fillCache",        metavar="FILE", help="Bulk-populate cache from callsign list file")
-    p.add_argument("--cacheOnly",        action="store_true", help="Only consult the cache; never call cloud services")
+    p.add_argument("--cacheOnly",        action="store_true",
+        help="Only consult the cache; never call cloud services")
+    p.add_argument("--excludedPrefixes", nargs="+", default=[], type=str,
+        help="List of callsign prefixes to exclude from lookups")
     p.add_argument("--logLevel",         metavar="LEVEL", default="WARNING",
                    choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                    help="Log level (default: WARNING)")
@@ -892,6 +903,7 @@ def main():
         airportCodesCsv=args.airportCodes,
         services=_serviceOverrides(args),
         cacheOnly=args.cacheOnly,
+        excludedPrefixes=args.excludedPrefixes,
     )
 
     if args.flushCache:
