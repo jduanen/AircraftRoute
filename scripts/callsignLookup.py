@@ -485,7 +485,7 @@ class OpenSkyService:
             raise RateLimitError("HTTP 429")
         if resp.status_code == 401:
             self._tokenExpiry = 0.0
-            raise ServiceUnavailableError("HTTP 401 — token expired")
+            raise ServiceUnavailableError("HTTP 401; token expired")
         if resp.status_code == 404 or resp.status_code == 204:
             return None
         if not resp.ok:
@@ -594,6 +594,7 @@ class FlightInfoLookup:
         airlineCodesCsv: str | None = None,
         airportCodesCsv: str | None = None,
         cacheOnly: bool = False,
+        includedPrefixes: list[str] | None = None,
         excludedPrefixes: list[str] | None = None,
     ):
         self.cacheOnly = cacheOnly
@@ -605,6 +606,7 @@ class FlightInfoLookup:
             with open(configPath) as f:
                 cfg = json.load(f)
 
+        self._includedPrefixes = includedPrefixes or cfg.get("includedPrefixes")
         self._excludedPrefixes = excludedPrefixes or cfg.get("excludedPrefixes")
 
         def _resolve(path: str) -> str:
@@ -632,8 +634,8 @@ class FlightInfoLookup:
         self._services = [
             _buildService(s) for s in serviceCfgs if s.get("enabled", True)
         ]
-        log.debug("FlightInfoLookup: services=%s airlineCodes=%s db=%s",
-                  [s.name for s in self._services], airlineCsvPath, dbPath)
+        log.debug("FlightInfoLookup: services=%s airlineCodes=%s db=%s, includedPrefixes=%s, excludedPrefixes=%s",
+                  [s.name for s in self._services], airlineCsvPath, dbPath, self._includedPrefixes, self._excludedPrefixes)
 
     def _enrichAirport(self, airport: Airport | None) -> Airport | None:
         if not airport or not self._airportLookup:
@@ -660,16 +662,19 @@ class FlightInfoLookup:
             return cached
 
         if cacheOnly or self.cacheOnly:
-            log.debug("Cache miss for %s (cacheOnly — not calling services)", callsign)
+            log.debug("Cache miss for %s (cacheOnly -- not calling services)", callsign)
             return None
 
         prefix = _callsignPrefix(callsign)
         if len(prefix) != 3 or (self._airlineLookup and not self._airlineLookup.get(prefix)):
-            log.debug("Skipping service lookup for %s — prefix %r not an airline code", callsign, prefix)
-            return None
+            if self._includedPrefixes and prefix in self._includedPrefixes:
+                log.debug("Prefix '%r' is in includedPrefixes (%s); so do lookup", prefix, self._includedPrefixes)
+            else:
+                log.debug("Skipping service lookup for %s; prefix %r not an airline code", callsign, prefix)
+                return None
 
         if self._excludedPrefixes and prefix in self._excludedPrefixes:
-            log.debug("Skipping service lookup for %s — prefix %r is in excluded prefix list: %s",
+            log.debug("Skipping service lookup for %s; prefix %r is in excluded prefix list: %s",
                       callsign, prefix, self._excludedPrefixes)
             return None
 
@@ -697,7 +702,7 @@ class FlightInfoLookup:
             if route.origin and route.destination:
                 self._cache.put(route)
             else:
-                log.debug("Not caching %s — missing origin or destination", callsign)
+                log.debug("Not caching %s; missing origin or destination", callsign)
             return route
 
         if airline:
@@ -721,7 +726,7 @@ class FlightInfoLookup:
             svc.stats['rateLimitErrors'] += 1
             svc.stats['lastRateLimit'] = time.time()
             svc.available = False
-            log.debug("%s rate-limited: %s — marking unavailable", svc.name, e)
+            log.debug("%s rate-limited: %s; marking unavailable", svc.name, e)
             return 'rateLimited', None
         except ServiceUnavailableError as e:
             svc.stats['unavailableErrors'] += 1
@@ -729,7 +734,7 @@ class FlightInfoLookup:
             return 'unavailable', None
         except Exception as e:
             svc.stats['otherErrors'] += 1
-            log.debug("%s unexpected error: %s — skipping", svc.name, e)
+            log.debug("%s unexpected error: %s; skipping", svc.name, e)
             return 'error', None
         finally:
             if svc.requestDelay > 0:
@@ -862,9 +867,11 @@ def _makeParser() -> argparse.ArgumentParser:
     p.add_argument("--dumpCache",        action="store_true", help="Print all cached routes and exit")
     p.add_argument("--fillCache",        metavar="FILE", help="Bulk-populate cache from callsign list file")
     p.add_argument("--cacheOnly",        action="store_true",
-        help="Only consult the cache; never call cloud services")
+                   help="Only consult the cache; never call cloud services")
+    p.add_argument("--includedPrefixes", nargs="+", default=[], type=str,
+                   help="List of callsign prefixes upon which to do forced lookups")
     p.add_argument("--excludedPrefixes", nargs="+", default=[], type=str,
-        help="List of callsign prefixes to exclude from lookups")
+                   help="List of callsign prefixes to exclude from lookups")
     p.add_argument("--logLevel",         metavar="LEVEL", default="WARNING",
                    choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                    help="Log level (default: WARNING)")
@@ -903,6 +910,7 @@ def main():
         airportCodesCsv=args.airportCodes,
         services=_serviceOverrides(args),
         cacheOnly=args.cacheOnly,
+        includedPrefixes=args.includedPrefixes,
         excludedPrefixes=args.excludedPrefixes,
     )
 
