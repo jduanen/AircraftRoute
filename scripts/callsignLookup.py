@@ -13,6 +13,9 @@ CLI:
     python callsignLookup.py --flushCache --config config.json
 """
 
+#### TODO put in sanity checks for returned routes -- check that at local airports appear at least once
+####      if not, ask for a second opinion from another service. make a tool to cleanse the route DB of bad routes.
+
 import argparse
 import csv
 import json
