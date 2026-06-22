@@ -84,34 +84,87 @@ Only routes with both origin and destination populated are written to the cache.
 
 ### Aircraft Infomation Services
 
-#### 1. AirLabs: `https://airlabs.co/api/v9/`
+It turns out that even the paid services are fairly inaccurate when it comes to providing the routes for an aircraft with a given callsign.
+
+#### Details of the different services
+
+The online services with the most accurate route information are (in order of accuracy) are as follows:
+
+##### 1. FlightConnections
+????
+Best for scheduled airline routes (most accurate route maps), 900+ airlines, no realtime positions, not for tracking
+Free tier is available
+????
+
+##### 2. FlightRadar24 (FR24)
+????
+very good route information (based on FAA flight plans and ADS-B data)
+best live tracking service, better than FlightAware
+paid service
+????
+
+##### 3. FlightAware (AeroAPI): `https://aeroapi.flightaware.com/aeroapi/`
+????
+Paid, expensive, realtime positions
+good data quality (95% commercial accuracy), with occasional mistakes in routes
+swaps origin and destination sometimes
+????
+
+????
+- Auth: `x-apikey` header
+- Route: `GET /flights/{callsign}`
+- Rate limit signal: HTTP 429
+
+##### 4. AviationStack: `https://api.aviationstack.com/v1/`
+????
+schedules and flight status information
+good data quality, multi-source backbone
+global coverage
+limited realtime information
+paid, free tier available
+strong for schedules and origin/destination information
+????
+
+Must create an account.
+100 req/month free.
+- Auth: `?access_key=` query param
+- Route: `GET /flights?flight_icao={callsign}`
+- Rate limit signals: HTTP 429 or `{"error": {"code": "usage_limit_reached"}}`
+
+##### 5. AirLabs: `https://airlabs.co/api/v9/`
+????
 Best free-tier option for direct route lookup.
+mid-market, realtime information, good quality data
+paid service with free tier
+global coverage
+popular developer API
+????
+
 Must create a (free) account at `https://airlabs.co`.
 - Auth: `?api_key=` query param
 - Route: `GET /flights?flight_icao={callsign}` → `dep_icao`, `arr_icao`
 - Airport detail: `GET /airports?icao_code={code}` → name, city, country, lat, lng
 - Rate limit signals: response body `{"error": {"message": "minute_limit_exceeded"|"hour_limit_exceeded"|"month_limit_exceeded"}}`
 
-#### 2. AeroDataBox: `https://aerodatabox.p.rapidapi.com`
-~500 req/month free via RapidAPI.
+##### 6. AeroDataBox: `https://aerodatabox.p.rapidapi.com`
+????
+site for budget lookups
+reasonable quality, not global coverage, limited realtime positions
+Paid, free tier available
+????
 Must create a (free) account at `https://rapidapi.com` and go to get a key for the AeroDataBox API.
+~500 req/month free via RapidAPI.
 - Auth: `X-RapidAPI-Key` header
 - Route: `GET /flights/callsign/{callsign}`
 - Rate limit signals: HTTP 429, or `X-RateLimit-Requests-Remaining: 0`
 
-#### 3. FlightAware: `https://aeroapi.flightaware.com/aeroapi/`
-Paid; highest data quality.
-- Auth: `x-apikey` header
-- Route: `GET /flights/{callsign}`
-- Rate limit signal: HTTP 429
+##### 7. OpenSky: `https://opensky-network.org/api`
+????
+inferred data only (from ADS-B tracks, not schedules)
+only historical data
+Free tier available
+????
 
-#### 4. AviationStack: `https://api.aviationstack.com/v1/`
-100 req/month free.
-- Auth: `?access_key=` query param
-- Route: `GET /flights?flight_icao={callsign}`
-- Rate limit signals: HTTP 429 or `{"error": {"code": "usage_limit_reached"}}`
-
-#### 5. OpenSky: `https://opensky-network.org/api`
 400 credits/day free. No direct callsign→route API; route is estimated from trajectory.
 - Auth: OAuth2 Bearer token (30-min TTL, refreshed automatically), or anonymous
 - Step 1: `GET /states/all` (no callsign filter exists server-side) → fetch all current states and match
