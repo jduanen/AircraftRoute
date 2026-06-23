@@ -31,17 +31,18 @@ requirements.txt       # requests, flask
 callsign
   │
   ▼
-RouteCache (SQLite)  ──hit──▶  FlightRoute
+RouteCache (SQLite)  ──[hit]──▶  FlightRoute
   │
- miss
+ [miss]
   │
   ▼
 Service chain (in order, skip unavailable)
-  1. AviationStack
-  2. OpenSky
-  3. AirLabs
-  4. AeroDataBox
-  5. FlightAware (last because it will auto-charge if you exceed your monthly quota)
+  1. FlightRadar24
+  2. FlightAware (will auto-charge if you exceed your monthly quota)
+  3. AviationStack
+  4. AirLabs
+  5. AeroDataBox
+  6. OpenSky
   │
   ▼
 Airline name fallback: prefix match against data/AirlineCodes.csv
@@ -90,20 +91,14 @@ It turns out that even the paid services are fairly inaccurate when it comes to 
 
 The online services with the most accurate route information are (in order of accuracy) are as follows:
 
-##### 1. FlightConnections
-????
-Best for scheduled airline routes (most accurate route maps), 900+ airlines, no realtime positions, not for tracking
-Free tier is available, $40/year or $150 lifetime
-????
-
-##### 2. FlightRadar24 (FR24)
+##### 1. FlightRadar24 (FR24)
 ????
 very good route information (based on FAA flight plans and ADS-B data)
 best live tracking service, better than FlightAware
 paid service (lowest tier, $9/month), no free tier for API
 ????
 
-##### 3. FlightAware (AeroAPI): `https://aeroapi.flightaware.com/aeroapi/`
+##### 2. FlightAware (AeroAPI): `https://aeroapi.flightaware.com/aeroapi/`
 ????
 Paid, expensive, realtime positions
 good data quality (95% commercial accuracy), with occasional mistakes in routes
@@ -117,7 +112,7 @@ See current usage: https://www.flightaware.com/aeroapi/portal/usage
 - Route: `GET /flights/{callsign}`
 - Rate limit signal: HTTP 429
 
-##### 4. AviationStack: `https://api.aviationstack.com/v1/`
+##### 3. AviationStack: `https://api.aviationstack.com/v1/`
 ????
 schedules and flight status information
 good data quality, multi-source backbone
@@ -133,7 +128,7 @@ Must create an account.
 - Route: `GET /flights?flight_icao={callsign}`
 - Rate limit signals: HTTP 429 or `{"error": {"code": "usage_limit_reached"}}`
 
-##### 5. AirLabs: `https://airlabs.co/api/v9/`
+##### 4. AirLabs: `https://airlabs.co/api/v9/`
 ????
 Best free-tier option for direct route lookup -- 1,000 queries/month
 mid-market, realtime information, good quality data
@@ -148,7 +143,7 @@ Must create a (free) account at `https://airlabs.co`.
 - Airport detail: `GET /airports?icao_code={code}` → name, city, country, lat, lng
 - Rate limit signals: response body `{"error": {"message": "minute_limit_exceeded"|"hour_limit_exceeded"|"month_limit_exceeded"}}`
 
-##### 6. AeroDataBox: `https://aerodatabox.p.rapidapi.com`
+##### 5. AeroDataBox: `https://aerodatabox.p.rapidapi.com`
 ????
 site for budget lookups
 reasonable quality, not global coverage, limited realtime positions
@@ -160,7 +155,7 @@ Must create a (free) account at `https://rapidapi.com` and go to get a key for t
 - Route: `GET /flights/callsign/{callsign}`
 - Rate limit signals: HTTP 429, or `X-RateLimit-Requests-Remaining: 0`
 
-##### 7. OpenSky: `https://opensky-network.org/api`
+##### 6. OpenSky: `https://opensky-network.org/api`
 ????
 inferred data only (from ADS-B tracks, not schedules)
 only historical data
@@ -187,11 +182,10 @@ Free tier available
   "airlineCodesCsv": "data/AirlineCodes.csv",
   "airportCodesCsv": "data/ListOfAirports.csv",
   "services": [
-    #{ "name": "flightConnections",   "disabled": false, "apiKey": "",             "requestDelay": 1.0 },
-    #{ "name": "fr24",          "disabled": false, "apiKey": "",             "requestDelay": 1.0 },
     { "name": "flightAware",   "enabled": false, "apiKey": "",             "requestDelay": 0.5 },
     { "name": "aviationStack", "enabled": false, "apiKey": "",             "requestDelay": 2.0 },
-    { "name": "airLabs",       "enabled": true,  "apiKey": "<key>",        "requestDelay": 1.0 },
+    { "name": "airLabs",       "enabled": true,  "apiKey": "<key1>",       "requestDelay": 1.0 },
+    { "name": "airLabs",       "enabled": true,  "alias": "airLabs-2",    "apiKey": "<key2>", "requestDelay": 1.0 },
     { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",        "requestDelay": 1.0 },
     { "name": "openSky",       "enabled": false, "username": "", "password": "", "requestDelay": 5.0 }
   ]
@@ -202,6 +196,15 @@ Paths in the config are resolved relative to the config file's directory. `~` is
 CLI flags override config values.
 
 `requestDelay` (seconds, default `0.0`) is the minimum pause after each call to that service. Applied after every attempt — hit, miss, or error — so consecutive calls during `--fillCache` don't exceed the service's rate limit. Suggested starting values are shown above; tune to your plan's actual limits.
+
+**Multiple instances of the same service** (e.g. two AirLabs accounts to double the monthly quota) are supported. Add an `"alias"` field to give each instance a distinct name:
+
+```json
+{ "name": "airLabs", "enabled": true,  "apiKey": "<key1>",       "requestDelay": 1.0 },
+{ "name": "airLabs", "enabled": true,  "alias": "airLabs-2",    "apiKey": "<key2>", "requestDelay": 1.0 }
+```
+
+The alias becomes the instance's effective name everywhere: stats, status, and the enable/disable endpoint. Without an alias, duplicate entries share the same name and `POST /services/<name>` will only match the first one.
 
 ---
 
@@ -400,15 +403,25 @@ curl http://localhost:5000/services
 ```json
 [
   {
-    "name": "aviationStack", "enabled": true, "available": false, "requestDelay": 2.0,
-    "calls": 42, "found": 18, "notFound": 12, "partial": 0,
-    "rateLimitErrors": 1, "unavailableErrors": 0, "otherErrors": 11,
+    "name": "airLabs", "enabled": true, "available": true, "requestDelay": 1.0,
+    "calls": 10, "found": 8, "notFound": 2, "partial": 0,
+    "rateLimitErrors": 0, "unavailableErrors": 0, "otherErrors": 0,
     "lastCall": "2026-06-14T09:12:04",
-    "lastSuccessfulCall": "2026-06-14T08:54:11",
-    "lastRateLimit": "2026-06-14T08:55:22"
+    "lastSuccessfulCall": "2026-06-14T09:12:04",
+    "lastRateLimit": null
+  },
+  {
+    "name": "airLabs-2", "enabled": true, "available": true, "requestDelay": 1.0,
+    "calls": 5, "found": 4, "notFound": 1, "partial": 0,
+    "rateLimitErrors": 0, "unavailableErrors": 0, "otherErrors": 0,
+    "lastCall": "2026-06-14T09:11:50",
+    "lastSuccessfulCall": "2026-06-14T09:11:50",
+    "lastRateLimit": null
   }
 ]
 ```
+
+Aliased instances appear under their alias name (e.g. `"airLabs-2"` above).
 
 Timestamps are `null` if the event has not occurred this session.
 
@@ -425,10 +438,12 @@ curl http://localhost:5000/services/status
 ```json
 [
   { "name": "aviationStack", "enabled": true,  "available": false },
-  { "name": "openSky",       "enabled": true,  "available": true  },
-  { "name": "airLabs",       "enabled": false, "available": true  }
+  { "name": "airLabs",       "enabled": true,  "available": true  },
+  { "name": "airLabs-2",     "enabled": true,  "available": true  }
 ]
 ```
+
+Aliased instances appear under their alias name.
 
 `enabled` — user-controlled (persists until server restart).
 `available` — cleared automatically when a service returns a rate-limit signal; restored when the service is re-enabled.
@@ -447,11 +462,16 @@ curl -X POST http://localhost:5000/services/openSky \
 curl -X POST http://localhost:5000/services/airLabs \
      -H "Content-Type: application/json" \
      -d '{"enabled": true}'
+
+# Target an aliased instance specifically
+curl -X POST http://localhost:5000/services/airLabs-2 \
+     -H "Content-Type: application/json" \
+     -d '{"enabled": false}'
 ```
 
 **Response (HTTP 200):**
 ```json
-{ "name": "airLabs", "enabled": true }
+{ "name": "airLabs-2", "enabled": false }
 ```
 
 **Response — unknown service (HTTP 404):**
@@ -459,7 +479,7 @@ curl -X POST http://localhost:5000/services/airLabs \
 { "error": "unknown service: 'badName'" }
 ```
 
-Service names: `airLabs`, `aeroDataBox`, `flightAware`, `aviationStack`, `openSky`.
+The `<name>` segment is matched against each service's effective name: the `"alias"` value if set, otherwise the `"name"` value from the config.
 
 ### Setting up the callsign to route lookup webserver
 
