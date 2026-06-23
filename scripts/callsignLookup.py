@@ -27,7 +27,9 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
+import fr24sdk
 import requests
 
 DEF_ROUTE_DB_PATH = "~/.aircraftroute/routes.db"
@@ -418,6 +420,69 @@ class AviationStackService:
         return FlightRoute(callsign=callsign, airline=airline or "", origin=origin, destination=dest)
 
 
+class FlightRadar24Service:
+    name = "flightRadar24"
+
+    def __init__(self, apiToken: str, requestDelay: float = 0.0):
+        self.apiToken = apiToken
+        self.enabled = True
+        self.available = True
+        self.requestDelay = requestDelay
+        self.stats = _initStats()
+        self._client = fr24sdk.Client(api_token=apiToken)
+
+    def lookup(self, callsign: str) -> FlightRoute | None:
+        # Try live positions first
+        log.debug("FlightRadar24 lookup %s (live)", callsign)
+        try:
+            resp = self._client.live.flight_positions.get_full(callsigns=[callsign])
+        except fr24sdk.RateLimitError as e:
+            raise RateLimitError(str(e))
+        except (fr24sdk.TransportError, fr24sdk.ApiError) as e:
+            raise ServiceUnavailableError(str(e))
+
+        for pos in (resp.data or []):
+            if (pos.callsign or "").strip() == callsign:
+                dep_icao = pos.orig_icao or ""
+                arr_icao = pos.dest_icao or ""
+                airline = pos.operating_as or ""
+                log.debug("FlightRadar24 live: %s → dep=%s arr=%s airline=%s",
+                          callsign, dep_icao, arr_icao, airline)
+                if dep_icao or arr_icao:
+                    origin = Airport(icao=dep_icao, iata=pos.orig_iata or "", name="", city="", country="", lat=0.0, lon=0.0) if dep_icao else None
+                    dest = Airport(icao=arr_icao, iata=pos.dest_iata or "", name="", city="", country="", lat=0.0, lon=0.0) if arr_icao else None
+                    return FlightRoute(callsign=callsign, airline=airline, origin=origin, destination=dest)
+
+        # Fall back to recent flight summaries (last 24 hours)
+        log.debug("FlightRadar24 lookup %s (summaries)", callsign)
+        now = datetime.now(timezone.utc)
+        try:
+            resp = self._client.flight_summary.get_full(
+                callsigns=[callsign],
+                flight_datetime_from=now - timedelta(hours=24),
+                flight_datetime_to=now,
+            )
+        except fr24sdk.RateLimitError as e:
+            raise RateLimitError(str(e))
+        except (fr24sdk.TransportError, fr24sdk.ApiError) as e:
+            raise ServiceUnavailableError(str(e))
+
+        if not resp.data:
+            log.debug("FlightRadar24: no flights found for %s", callsign)
+            return None
+        f = resp.data[-1]
+        dep_icao = f.orig_icao or ""
+        arr_icao = f.dest_icao or ""
+        airline = f.operating_as or ""
+        log.debug("FlightRadar24 summary: %s → dep=%s arr=%s airline=%s",
+                  callsign, dep_icao, arr_icao, airline)
+        if not dep_icao and not arr_icao:
+            return None
+        origin = Airport(icao=dep_icao, iata=f.orig_iata or "", name="", city="", country="", lat=0.0, lon=0.0) if dep_icao else None
+        dest = Airport(icao=arr_icao, iata=f.dest_iata or "", name="", city="", country="", lat=0.0, lon=0.0) if arr_icao else None
+        return FlightRoute(callsign=callsign, airline=airline, origin=origin, destination=dest)
+
+
 class OpenSkyService:
     """
     Last-resort adapter. OpenSky has no direct callsign→route API; this uses
@@ -582,14 +647,16 @@ def _callsignPrefix(callsign: str) -> str:
 def _buildService(cfg: dict):
     name = cfg.get("name", "")
     delay = float(cfg.get("requestDelay", 0.0))
-    if name == "airLabs":
-        svc = AirLabsService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
-    elif name == "aeroDataBox":
-        svc = AeroDataBoxService(rapidApiKey=cfg.get("rapidApiKey", ""), requestDelay=delay)
+    if name == "flightRadar24":
+        svc = FlightRadar24Service(apiToken=cfg.get("apiToken", ""), requestDelay=delay)
     elif name == "flightAware":
         svc = FlightAwareService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
     elif name == "aviationStack":
         svc = AviationStackService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
+    elif name == "airLabs":
+        svc = AirLabsService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
+    elif name == "aeroDataBox":
+        svc = AeroDataBoxService(rapidApiKey=cfg.get("rapidApiKey", ""), requestDelay=delay)
     elif name == "openSky":
         svc = OpenSkyService(username=cfg.get("username", ""), password=cfg.get("password", ""), requestDelay=delay)
     else:
