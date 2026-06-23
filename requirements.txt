@@ -1,2 +1,3 @@
 requests
 flask
+fr24sdk
