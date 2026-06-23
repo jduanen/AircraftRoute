@@ -583,16 +583,21 @@ def _buildService(cfg: dict):
     name = cfg.get("name", "")
     delay = float(cfg.get("requestDelay", 0.0))
     if name == "airLabs":
-        return AirLabsService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
-    if name == "aeroDataBox":
-        return AeroDataBoxService(rapidApiKey=cfg.get("rapidApiKey", ""), requestDelay=delay)
-    if name == "flightAware":
-        return FlightAwareService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
-    if name == "aviationStack":
-        return AviationStackService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
-    if name == "openSky":
-        return OpenSkyService(username=cfg.get("username", ""), password=cfg.get("password", ""), requestDelay=delay)
-    raise ValueError(f"Unknown service: {name!r}")
+        svc = AirLabsService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
+    elif name == "aeroDataBox":
+        svc = AeroDataBoxService(rapidApiKey=cfg.get("rapidApiKey", ""), requestDelay=delay)
+    elif name == "flightAware":
+        svc = FlightAwareService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
+    elif name == "aviationStack":
+        svc = AviationStackService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
+    elif name == "openSky":
+        svc = OpenSkyService(username=cfg.get("username", ""), password=cfg.get("password", ""), requestDelay=delay)
+    else:
+        raise ValueError(f"Unknown service: {name!r}")
+    alias = cfg.get("alias")
+    if alias:
+        svc.name = alias
+    return svc
 
 
 class FlightInfoLookup:

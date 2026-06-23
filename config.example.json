@@ -4,10 +4,11 @@
   "airportCodesCsv": "data/AirportCodes.csv",
   "logLevel": "INFO",
   "services": [
-    { "name": "airLabs",       "enabled": true,  "apiKey": "",                    "requestDelay": 1.0 },
-    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",               "requestDelay": 1.0 },
     { "name": "flightAware",   "enabled": false, "apiKey": "",                    "requestDelay": 0.5 },
     { "name": "aviationStack", "enabled": false, "apiKey": "",                    "requestDelay": 2.0 },
+    { "name": "airLabs",       "enabled": true,  "apiKey": "",                    "requestDelay": 1.0 },
+    { "name": "airLabs",       "enabled": false, "alias": "airLabs-2", "apiKey": "", "requestDelay": 1.0 },
+    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",               "requestDelay": 1.0 },
     { "name": "openSky",       "enabled": false, "username": "", "password": "",  "requestDelay": 5.0 }
   ]
 }
