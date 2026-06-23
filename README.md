@@ -93,14 +93,14 @@ The online services with the most accurate route information are (in order of ac
 ##### 1. FlightConnections
 ????
 Best for scheduled airline routes (most accurate route maps), 900+ airlines, no realtime positions, not for tracking
-Free tier is available
+Free tier is available, $40/year or $150 lifetime
 ????
 
 ##### 2. FlightRadar24 (FR24)
 ????
 very good route information (based on FAA flight plans and ADS-B data)
 best live tracking service, better than FlightAware
-paid service
+paid service (lowest tier, $9/month), no free tier for API
 ????
 
 ##### 3. FlightAware (AeroAPI): `https://aeroapi.flightaware.com/aeroapi/`
@@ -109,6 +109,8 @@ Paid, expensive, realtime positions
 good data quality (95% commercial accuracy), with occasional mistakes in routes
 swaps origin and destination sometimes
 ????
+
+See current usage: https://www.flightaware.com/aeroapi/portal/usage
 
 ????
 - Auth: `x-apikey` header
@@ -133,7 +135,7 @@ Must create an account.
 
 ##### 5. AirLabs: `https://airlabs.co/api/v9/`
 ????
-Best free-tier option for direct route lookup.
+Best free-tier option for direct route lookup -- 1,000 queries/month
 mid-market, realtime information, good quality data
 paid service with free tier
 global coverage
@@ -185,10 +187,12 @@ Free tier available
   "airlineCodesCsv": "data/AirlineCodes.csv",
   "airportCodesCsv": "data/ListOfAirports.csv",
   "services": [
-    { "name": "airLabs",       "enabled": true,  "apiKey": "<key>",        "requestDelay": 1.0 },
-    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",        "requestDelay": 1.0 },
+    #{ "name": "flightConnections",   "disabled": false, "apiKey": "",             "requestDelay": 1.0 },
+    #{ "name": "fr24",          "disabled": false, "apiKey": "",             "requestDelay": 1.0 },
     { "name": "flightAware",   "enabled": false, "apiKey": "",             "requestDelay": 0.5 },
     { "name": "aviationStack", "enabled": false, "apiKey": "",             "requestDelay": 2.0 },
+    { "name": "airLabs",       "enabled": true,  "apiKey": "<key>",        "requestDelay": 1.0 },
+    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",        "requestDelay": 1.0 },
     { "name": "openSky",       "enabled": false, "username": "", "password": "", "requestDelay": 5.0 }
   ]
 }
