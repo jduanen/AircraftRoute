@@ -105,7 +105,7 @@ The online services with the most accurate route information are (in order of ac
 
 **Python SDK:** Official SDK `fr24sdk` published by Flightradar24. Install with `pip install fr24sdk` (already in `requirements.txt`).
 
-- Auth: `Client(api_token="<token>")` or set the `FR24_API_TOKEN` environment variable; config key: `"apiToken"`
+- Auth: `Client(api_token="<token>")` or set the `FR24_API_TOKEN` environment variable; config key: `"apiKey"`
 - Live route: `client.live.flight_positions.get_full(callsigns=[callsign])` → `FlightPositionsFull`: `orig_icao`, `orig_iata`, `dest_icao`, `dest_iata`, `operating_as`
 - Historical route (fallback, last 24 h): `client.flight_summary.get_full(callsigns=[callsign], flight_datetime_from=..., flight_datetime_to=...)` → `FlightSummaryFull`: same fields
 - The adapter tries live first; if the flight is not currently airborne it falls back to the 24-hour summary window.
@@ -202,7 +202,7 @@ The online services with the most accurate route information are (in order of ac
   "airportCodesCsv": "data/ListOfAirports.csv",
   "logLevel": "INFO",
   "services": [
-    { "name": "flightRadar24", "enabled": false, "apiToken": "<token>",  "requestDelay": 1.0},
+    { "name": "flightradar24", "enabled": false, "apiKey": "<key>",      "requestDelay": 1.0 },
     { "name": "flightAware",   "enabled": false, "apiKey": "<key>",      "requestDelay": 0.5 },
     { "name": "aviationStack", "enabled": false, "apiKey": "<key>",      "requestDelay": 2.0 },
     { "name": "airLabs",       "enabled": true,  "apiKey": "<key1>",     "requestDelay": 1.0 },

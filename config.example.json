@@ -4,7 +4,7 @@
   "airportCodesCsv": "data/AirportCodes.csv",
   "logLevel": "INFO",
   "services": [
-    { "name": "flightRadar24", "enabled": false, "apiToken": "",                   "requestDelay": 1.0 }
+    { "name": "flightradar24", "enabled": false, "apiKey": "",                    "requestDelay": 1.0 },
     { "name": "flightAware",   "enabled": false, "apiKey": "",                    "requestDelay": 0.5 },
     { "name": "aviationStack", "enabled": false, "apiKey": "",                    "requestDelay": 2.0 },
     { "name": "airLabs",       "enabled": true,  "apiKey": "",                    "requestDelay": 1.0 },

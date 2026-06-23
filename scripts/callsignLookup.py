@@ -421,15 +421,15 @@ class AviationStackService:
 
 
 class FlightRadar24Service:
-    name = "flightRadar24"
+    name = "flightradar24"
 
-    def __init__(self, apiToken: str, requestDelay: float = 0.0):
-        self.apiToken = apiToken
+    def __init__(self, apiKey: str, requestDelay: float = 0.0):
+        self.apiKey = apiKey
         self.enabled = True
         self.available = True
         self.requestDelay = requestDelay
         self.stats = _initStats()
-        self._client = fr24sdk.Client(api_token=apiToken)
+        self._client = fr24sdk.Client(api_token=apiKey)
 
     def lookup(self, callsign: str) -> FlightRoute | None:
         # Try live positions first
@@ -647,8 +647,8 @@ def _callsignPrefix(callsign: str) -> str:
 def _buildService(cfg: dict):
     name = cfg.get("name", "")
     delay = float(cfg.get("requestDelay", 0.0))
-    if name == "flightRadar24":
-        svc = FlightRadar24Service(apiToken=cfg.get("apiToken", ""), requestDelay=delay)
+    if name == "flightradar24":
+        svc = FlightRadar24Service(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
     elif name == "flightAware":
         svc = FlightAwareService(apiKey=cfg.get("apiKey", ""), requestDelay=delay)
     elif name == "aviationStack":
