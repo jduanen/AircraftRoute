@@ -36,9 +36,9 @@ RouteCache (SQLite)  ──[hit]──▶  FlightRoute
  [miss]
   │
   ▼
-Service chain (in order, skip unavailable)
+Service chain (in order, skip if unavailable/disabled)
   1. FlightRadar24
-  2. FlightAware (will auto-charge if you exceed your monthly quota)
+  2. FlightAware (will auto-charge if you exceed your free monthly quota)
   3. AviationStack
   4. AirLabs
   5. AeroDataBox
@@ -91,103 +91,124 @@ It turns out that even the paid services are fairly inaccurate when it comes to 
 
 The online services with the most accurate route information are (in order of accuracy) are as follows:
 
-##### 1. FlightRadar24 (FR24)
-????
-very good route information (based on FAA flight plans and ADS-B data)
-best live tracking service, better than FlightAware
-paid service (lowest tier, $9/month), no free tier for API
-????
+##### 1. FlightRadar24 (FR24): `https://fr24api.flightradar24.com`
+
+* Overview
+  - very good route information (based on FAA flight plans and ADS-B data)
+  - best live tracking service, better than FlightAware
+  - paid service (no free tier for API access)
+    * subscribe at: `https://fr24api.flightradar24.com`
+    * can see usage at: https://fr24api.flightradar24.com/usage-metrics
+
+* Access Information
+  - ????
+
+**Python SDK:** Official SDK `fr24sdk` published by Flightradar24. Install with `pip install fr24sdk` (already in `requirements.txt`).
+
+- Auth: `Client(api_token="<token>")` or set the `FR24_API_TOKEN` environment variable; config key: `"apiToken"`
+- Live route: `client.live.flight_positions.get_full(callsigns=[callsign])` → `FlightPositionsFull`: `orig_icao`, `orig_iata`, `dest_icao`, `dest_iata`, `operating_as`
+- Historical route (fallback, last 24 h): `client.flight_summary.get_full(callsigns=[callsign], flight_datetime_from=..., flight_datetime_to=...)` → `FlightSummaryFull`: same fields
+- The adapter tries live first; if the flight is not currently airborne it falls back to the 24-hour summary window.
+- SDK exceptions: `fr24sdk.RateLimitError` → `RateLimitError`; `fr24sdk.TransportError` / `fr24sdk.ApiError` → `ServiceUnavailableError`
 
 ##### 2. FlightAware (AeroAPI): `https://aeroapi.flightaware.com/aeroapi/`
-????
-Paid, expensive, realtime positions
-good data quality (95% commercial accuracy), with occasional mistakes in routes
-swaps origin and destination sometimes
-????
 
-See current usage: https://www.flightaware.com/aeroapi/portal/usage
+* Overview
+  - paid, expensive, offers realtime position data
+    * can view current usage at: https://www.flightaware.com/aeroapi/portal/usage
+  - good data quality (95% commercial accuracy), with occasional mistakes in routes
+    * swaps origin and destination sometimes
 
-????
-- Auth: `x-apikey` header
-- Route: `GET /flights/{callsign}`
-- Rate limit signal: HTTP 429
+* Access Information
+  - Auth: `x-apikey` header
+  - Route: `GET /flights/{callsign}`
+  - Rate limit signal: HTTP 429
 
 ##### 3. AviationStack: `https://api.aviationstack.com/v1/`
-????
-schedules and flight status information
-good data quality, multi-source backbone
-global coverage
-limited realtime information
-paid, free tier available
-strong for schedules and origin/destination information
-????
 
-Must create an account.
-100 req/month free.
-- Auth: `?access_key=` query param
-- Route: `GET /flights?flight_icao={callsign}`
-- Rate limit signals: HTTP 429 or `{"error": {"code": "usage_limit_reached"}}`
+* Overview
+  - provides schedules and flight status information
+    * good data quality, multi-source backbone
+    * global coverage
+  - limited realtime information
+  - strong for schedules and origin/destination information
+  - paid service, but free tier available
+    * must create an account
+    * 100 req/month free
+
+* Access Information
+  - Auth: `?access_key=` query param
+  - Route: `GET /flights?flight_icao={callsign}`
+  - Rate limit signals: HTTP 429 or `{"error": {"code": "usage_limit_reached"}}`
 
 ##### 4. AirLabs: `https://airlabs.co/api/v9/`
-????
-Best free-tier option for direct route lookup -- 1,000 queries/month
-mid-market, realtime information, good quality data
-paid service with free tier
-global coverage
-popular developer API
-????
 
-Must create a (free) account at `https://airlabs.co`.
-- Auth: `?api_key=` query param
-- Route: `GET /flights?flight_icao={callsign}` → `dep_icao`, `arr_icao`
-- Airport detail: `GET /airports?icao_code={code}` → name, city, country, lat, lng
-- Rate limit signals: response body `{"error": {"message": "minute_limit_exceeded"|"hour_limit_exceeded"|"month_limit_exceeded"}}`
+* Overview
+  - best free-tier option for direct route lookup
+    * mid-market service, realtime information, good quality data
+    * global coverage
+    * popular developer API
+  - paid service with free tier
+    * create a (free) account at `https://airlabs.co
+    * 1,000 queries/month free
+
+* Access Information
+  - Auth: `?api_key=` query param
+  - Route: `GET /flights?flight_icao={callsign}` → `dep_icao`, `arr_icao`
+  - Airport detail: `GET /airports?icao_code={code}` → name, city, country, lat, lng
+  - Rate limit signals: response body `{"error": {"message": "minute_limit_exceeded"|"hour_limit_exceeded"|"month_limit_exceeded"}}`
 
 ##### 5. AeroDataBox: `https://aerodatabox.p.rapidapi.com`
-????
-site for budget lookups
-reasonable quality, not global coverage, limited realtime positions
-Paid, free tier available
-????
-Must create a (free) account at `https://rapidapi.com` and go to get a key for the AeroDataBox API.
-~500 req/month free via RapidAPI.
-- Auth: `X-RapidAPI-Key` header
-- Route: `GET /flights/callsign/{callsign}`
-- Rate limit signals: HTTP 429, or `X-RateLimit-Requests-Remaining: 0`
+
+* Overview
+  - site for budget lookups
+  - reasonable quality, no global coverage, limited realtime positions
+  - paid service, with free tier available
+    * create a (free) account at `https://rapidapi.com`
+      - get a key for the AeroDataBox API
+    * ~500 req/month free via RapidAPI
+
+* Access Information
+  - Auth: `X-RapidAPI-Key` header
+  - Route: `GET /flights/callsign/{callsign}`
+  - Rate limit signals: HTTP 429, or `X-RateLimit-Requests-Remaining: 0`
 
 ##### 6. OpenSky: `https://opensky-network.org/api`
-????
-inferred data only (from ADS-B tracks, not schedules)
-only historical data
-Free tier available
-????
 
-400 credits/day free. No direct callsign→route API; route is estimated from trajectory.
-- Auth: OAuth2 Bearer token (30-min TTL, refreshed automatically), or anonymous
-- Step 1: `GET /states/all` (no callsign filter exists server-side) → fetch all current states and match
-  the requested callsign against each state vector's `callsign` field client-side → ICAO24 hex
-- Step 2: `GET /flights/aircraft?icao24={hex}&begin=...&end=...` → estimated departure/arrival airports
-  for the flight whose `callsign` matches exactly; no match → no result (never guesses from a different flight)
-- Rate limit signal: HTTP 429; HTTP 401 triggers token refresh
+* Overview
+  * inferred data only (from ADS-B tracks, not schedules)
+    - no direct callsign→route API
+    - route is estimated from trajectory
+  * only historical data
+  * free tier available
+    - 400 credits/day free
+
+* Access Information
+  - Auth: OAuth2 Bearer token (30-min TTL, refreshed automatically), or anonymous
+  - Step 1: `GET /states/all` (no callsign filter exists server-side) → fetch all current states and match the requested callsign against each state vector's `callsign` field client-side → ICAO24 hex
+  - Step 2: `GET /flights/aircraft?icao24={hex}&begin=...&end=...` → estimated departure/arrival airports for the flight whose `callsign` matches exactly; no match → no result (never guesses from a different flight)
+  - Rate limit signal: HTTP 429; HTTP 401 triggers token refresh
 
 ---
 
 ### Config file
 
-`config.json` (copy from `config.example.json`):
+`config.json` (copy from `config.example.json` and modify as needed):
 
 ```json
 {
   "cacheDb": "~/.AircraftRoute/routes.db",
   "airlineCodesCsv": "data/AirlineCodes.csv",
   "airportCodesCsv": "data/ListOfAirports.csv",
+  "logLevel": "INFO",
   "services": [
-    { "name": "flightAware",   "enabled": false, "apiKey": "",             "requestDelay": 0.5 },
-    { "name": "aviationStack", "enabled": false, "apiKey": "",             "requestDelay": 2.0 },
-    { "name": "airLabs",       "enabled": true,  "apiKey": "<key1>",       "requestDelay": 1.0 },
-    { "name": "airLabs",       "enabled": true,  "alias": "airLabs-2",    "apiKey": "<key2>", "requestDelay": 1.0 },
-    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "",        "requestDelay": 1.0 },
-    { "name": "openSky",       "enabled": false, "username": "", "password": "", "requestDelay": 5.0 }
+    { "name": "flightRadar24", "enabled": false, "apiToken": "<token>",  "requestDelay": 1.0},
+    { "name": "flightAware",   "enabled": false, "apiKey": "<key>",      "requestDelay": 0.5 },
+    { "name": "aviationStack", "enabled": false, "apiKey": "<key>",      "requestDelay": 2.0 },
+    { "name": "airLabs",       "enabled": true,  "apiKey": "<key1>",     "requestDelay": 1.0 },
+    { "name": "airLabs",       "enabled": true,  "alias": "airLabs-2",   "apiKey": "<key2>", "requestDelay": 1.0 },
+    { "name": "aeroDataBox",   "enabled": false, "rapidApiKey": "<key>", "requestDelay": 1.0 },
+    { "name": "openSky",       "enabled": false, "username": "<user>", "password": "<passwd>", "requestDelay": 5.0 },
   ]
 }
 ```
@@ -200,8 +221,8 @@ CLI flags override config values.
 **Multiple instances of the same service** (e.g. two AirLabs accounts to double the monthly quota) are supported. Add an `"alias"` field to give each instance a distinct name:
 
 ```json
-{ "name": "airLabs", "enabled": true,  "apiKey": "<key1>",       "requestDelay": 1.0 },
-{ "name": "airLabs", "enabled": true,  "alias": "airLabs-2",    "apiKey": "<key2>", "requestDelay": 1.0 }
+{ "name": "airLabs", "enabled": true, "apiKey": "<key1>", "requestDelay": 1.0 },
+{ "name": "airLabs", "enabled": true, "alias": "airLabs-2", "apiKey": "<key2>", "requestDelay": 1.0 }
 ```
 
 The alias becomes the instance's effective name everywhere: stats, status, and the enable/disable endpoint. Without an alias, duplicate entries share the same name and `POST /services/<name>` will only match the first one.
