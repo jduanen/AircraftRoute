@@ -459,8 +459,8 @@ class FlightRadar24Service:
         try:
             resp = self._client.flight_summary.get_full(
                 callsigns=[callsign],
-                flight_datetime_from=now - timedelta(hours=24),
-                flight_datetime_to=now,
+                flight_datetime_from=(now - timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S'),
+                flight_datetime_to=now.strftime('%Y-%m-%dT%H:%M:%S'),
             )
         except fr24sdk.RateLimitError as e:
             raise RateLimitError(str(e))
